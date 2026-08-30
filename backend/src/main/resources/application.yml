@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: clm-platform
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/clm}
+    username: ${SPRING_DATASOURCE_USERNAME:clm}
+    password: ${SPRING_DATASOURCE_PASSWORD:clm_local_pw}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  mvc:
+    async:
+      request-timeout: 120000
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
+
+server:
+  port: 8080
+  error:
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+clm:
+  jwt:
+    secret: ${CLM_JWT_SECRET:change-me-to-a-long-random-secret-string-at-least-32-bytes}
+    ttl-minutes: ${CLM_JWT_TTL_MINUTES:720}
+  llm:
+    base-url: ${LLM_BASE_URL:}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:gpt-4o-mini}
+    model-reasoning: ${LLM_MODEL_REASONING:}
+    embedding-model: ${LLM_EMBEDDING_MODEL:}
+    embedding-dim: ${LLM_EMBEDDING_DIM:1536}
+    timeout-seconds: 90
+  word-editor:
+    internal-url: ${WORD_EDITOR_INTERNAL_URL:}
+    public-url: ${WORD_EDITOR_PUBLIC_URL:http://localhost:3100}
+    token: ${WORD_EDITOR_TOKEN:}
+
+logging:
+  level:
+    com.acme.clm: INFO
+    org.hibernate.SQL: WARN

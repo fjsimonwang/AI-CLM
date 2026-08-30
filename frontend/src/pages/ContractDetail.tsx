@@ -1,0 +1,840 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useParams } from "react-router-dom";
+import { api, apiBlob, money, date, usePerms, useAuth } from "../api";
+import { Card, SectionTitle, Badge, Spinner, Empty, Tabs, statusTone, riskTone, Confidence } from "../components/ui";
+import { BriefingCard } from "../components/BriefingCard";
+import { Icon } from "../components/icons";
+import { DocumentPanel } from "../components/DocumentPanel";
+import { CommentThreads } from "../components/CommentThreads";
+import { AiReviewPanel } from "../components/AiReviewPanel";
+import { RiskRegister } from "../components/RiskRegister";
+import { useHighlight } from "../components/highlight";
+import { useDocEdited } from "../components/docEdited";
+
+const enumLabel = (v: any) =>
+  typeof v === "string" && v === v.toUpperCase() && v.includes("_")
+    ? v.toLowerCase().replace(/_/g, " ")
+    : String(v);
+
+const RELATION_LABELS: Record<string, string> = {
+  AMENDS: "Amends",
+  AMENDED_BY: "Amended by",
+  SUPERSEDES: "Supersedes",
+  SUPERSEDED_BY: "Superseded by",
+  PRECEDES: "Preceded by",
+  FOLLOWS: "Follows",
+  MASTER: "Sits under",
+  UNDER: "Subcontract of",
+  SIMILAR_FAMILY: "Same family",
+};
+const relationLabel = (t: string) => RELATION_LABELS[t] || enumLabel(t);
+const sevRank = (s?: string) => (s === "CRITICAL" ? 4 : s === "HIGH" ? 3 : s === "MEDIUM" ? 2 : 1);
+
+const renderSummaryWithSession = (summary: string, sessionId: string) => {
+  const m = summary.match(/(.*?conversational intake session\s+)([0-9a-f-]+)(.*)/i);
+  if (!m) return summary;
+  return (
+    <>
+      {m[1]}
+      <Link to={`/intake-sessions/${sessionId}`} className="link">{m[2]}</Link>
+      {m[3]}
+    </>
+  );
+};
+
+export default function ContractDetail() {
+  const { id } = useParams();
+  const qc = useQueryClient();
+  const can = usePerms();
+  const [tab, setTab] = useState("overview");
+  const [recordOpen, setRecordOpen] = useState(true);
+  const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
+  const [checking, setChecking] = useState(false);
+  const [qcError, setQcError] = useState<string | null>(null);
+
+  const c = useQuery({ queryKey: ["contract", id], queryFn: () => api(`/contracts/${id}`) });
+  const wf = useQuery({ queryKey: ["wf", id], queryFn: () => api(`/workflow/status/${id}`) });
+  const d: any = c.data;
+  const fields = useQuery({
+    queryKey: ["typefields", d?.type],
+    queryFn: () => api(`/refdata/contract-types/${d.type}/fields`),
+    enabled: !!d?.type,
+  });
+  const audit = useQuery({ queryKey: ["audit", id], queryFn: () => api(`/audit/CONTRACT/${id}`), enabled: tab === "audit" });
+
+  const relations = useQuery({ queryKey: ["relations", id], queryFn: () => api(`/contracts/${id}/relations`) });
+  const risks = useQuery({ queryKey: ["risks", id], queryFn: () => api(`/contracts/${id}/risks`), enabled: !!id });
+  const attachmentsQuery = useQuery({
+    queryKey: ["contract-attachments", id],
+    queryFn: () => api(`/contracts/${id}/attachments`),
+    enabled: tab === "document",
+  });
+
+  async function downloadAttachment(attachmentId: string, filename: string) {
+    const blob = await apiBlob(`/contracts/${id}/attachments/${attachmentId}/file`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  const detectRelations = useMutation({
+    mutationFn: () => api(`/contracts/${id}/relations/detect`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["relations", id] }),
+  });
+  const decideRelation = useMutation({
+    mutationFn: (p: { relId: string; decision: "confirm" | "reject" }) =>
+      api(`/contracts/${id}/relations/${p.relId}/${p.decision}`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["relations", id] }),
+  });
+
+  const storedBriefings = useQuery({
+    queryKey: ["briefing", id],
+    queryFn: () => api(`/ai/briefings?contractIds=${id}`),
+    enabled: !!id,
+  });
+  const summarize = useMutation({
+    mutationFn: () => api("/ai/approver-briefing", { method: "POST", json: { contractId: id, force: true } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["briefing", id] });
+      qc.invalidateQueries({ queryKey: ["briefings"] });
+    },
+  });
+  const startWf = useMutation({
+    mutationFn: () => api(`/workflow/start/${id}`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wf", id] });
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+    },
+  });
+  const setStatus = useMutation({
+    mutationFn: (status: string) => api(`/contracts/${id}/status`, { method: "PATCH", json: { status } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["contract", id] }),
+  });
+
+  // mandatory AI quick check before the requestor can submit a draft for approval.
+  // Edits are synced first, and if a completed review already covers the edited
+  // content it is reused instead of running a second review.
+  const beginSubmit = () => {
+    if (!id || checking) return;
+    setChecking(true);
+    setQcError(null);
+    setQuickCheck(null);
+    const editedAt = useDocEdited.getState().lastAt || 0;
+    api(`/contracts/${id}/document/sync`, { method: "POST" })
+      .then(() => api(`/ai/review-runs?contractId=${id}`))
+      .then((run: any) => {
+        if (run && run.status === "DONE" && run.createdAt &&
+            new Date(run.createdAt).getTime() > editedAt) {
+          return run;
+        }
+        return api("/ai/review-quick", { method: "POST", json: { contractId: id } });
+      })
+      .then((res: any) => {
+        const findings: any[] = res.finding || res.findings || [];
+        setQuickCheck({ ...res, criticalCount: findings.filter((f) => f.severity === "CRITICAL").length });
+        // the quick-check run is persisted server-side — keep the review panel in sync
+        qc.invalidateQueries({ queryKey: ["review-run", id] });
+      })
+      .catch((e: any) => setQcError(e.message || "AI quick check failed"))
+      .finally(() => setChecking(false));
+  };
+
+  const grouped = useMemo(() => {
+    const attrs: Record<string, any> = d?.typeAttributes || {};
+    const spec: any[] = fields.data || [];
+    const specByKey = Object.fromEntries(spec.map((f) => [f.key, f]));
+    const groups: Record<string, { key: string; label: string; value: any; money?: boolean }[]> = {};
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === "") continue;
+      const f = specByKey[k];
+      const g = f?.group || "Other";
+      (groups[g] ||= []).push({ key: k, label: f?.label || k.replace(/_/g, " "), value: v, money: f?.money });
+    }
+    return groups;
+  }, [d, fields.data]);
+
+  const user = useAuth((s) => s.user);
+  const storedBriefing = (storedBriefings.data || {})[id || ""];
+
+  if (c.isLoading) return <Spinner label="Loading contract…" />;
+  if (c.isError) return <Empty>Contract not found.</Empty>;
+
+  const canEdit = can("EDIT_CONTRACT");
+  const isRequestor = !!user && (user.id === d.ownerUserId || user.id === (d as any).createdBy);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <Link to="/contracts" className="link text-sm flex items-center gap-1">
+            <Icon.chevronLeft width={14} height={14} /> Contracts
+          </Link>
+          <h1 className="text-xl font-medium mt-1">{d.title}</h1>
+          <div className="text-sm text-ink-faint flex flex-wrap items-center gap-2 mt-1">
+            <span className="tabular">{d.contractNumber}</span>
+            <Badge tone={statusTone(d.status)}>{d.status}</Badge>
+            <Badge tone={riskTone(d.riskTier)}>{d.riskTier || "risk n/a"}</Badge>
+            {d.source === "MIGRATED" && <Badge tone="warn">migrated</Badge>}
+            {d.parentContractId && (
+              <Link to={`/contracts/${d.parentContractId}`} className="link">
+                {d.relationshipType} parent
+              </Link>
+            )}
+          </div>
+        </div>
+        {(canEdit || isRequestor) && (
+          <div className="flex gap-2 shrink-0">
+            {d.status === "DRAFT" && (
+              <button className="btn btn-primary" disabled={checking || startWf.isPending} onClick={beginSubmit}>
+                Submit for approval
+              </button>
+            )}
+            {d.status === "IN_REVIEW" && canEdit && (
+              <button className="btn" onClick={() => setStatus.mutate("DRAFT")}>Recall to draft</button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <Card className="!p-0 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setRecordOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-2 transition-colors"
+        >
+          <span className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI summary &amp; briefing</span>
+          <Icon.chevronDown
+            width={15}
+            height={15}
+            style={{ transition: "transform 0.2s", transform: recordOpen ? "none" : "rotate(-90deg)" }}
+          />
+        </button>
+        {recordOpen && (
+        <div className="px-4 pb-4 space-y-4 fade-in">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">Summary</h2>
+              <button className="btn btn-ai" style={{ padding: "0.3rem 0.6rem" }} disabled={summarize.isPending} onClick={() => summarize.mutate()}>
+                <Icon.sparkle width={14} height={14} /> {summarize.isPending ? "Reviewing…" : storedBriefing ? "Regenerate AI briefing" : "Generate AI briefing"}
+              </button>
+            </div>
+            <p className="text-[0.95rem] leading-relaxed font-serif">
+              {d.summary && d.intakeSessionId ? (
+                renderSummaryWithSession(d.summary, d.intakeSessionId)
+              ) : (
+                d.summary || "No summary recorded yet."
+              )}
+            </p>
+            {(storedBriefing || summarize.isPending) && (
+              <div className="mt-3">
+                {summarize.isPending && !storedBriefing ? (
+                  <p className="text-sm text-ink-faint">Preparing AI briefing…</p>
+                ) : (
+                  <BriefingCard
+                    briefing={storedBriefing?.briefing}
+                    generatedAt={storedBriefing?.generatedAt}
+                    cached
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        )}
+      </Card>
+
+      <Tabs
+        tabs={[
+          { key: "overview", label: "Overview" },
+          { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
+          { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
+          { key: "discussion", label: "Discussion", count: d.discussionCount ?? 0 },
+          { key: "workflow", label: "Workflow" },
+          { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
+          { key: "relations", label: "Relations", count:
+              (relations.data?.relations?.length ?? 0)
+              + (d.parentContractId ? 1 : 0)
+              + (d.children || []).length },
+          { key: "risks", label: "Risks", count: (risks.data || []).filter((r: any) => r.status === "OPEN").length },
+          { key: "audit", label: "Audit trail" },
+        ]}
+        active={tab}
+        onChange={(t) => {
+          setTab(t);
+          setRecordOpen(false);
+        }}
+      />
+
+      {tab === "overview" && (
+        <div className="space-y-4 fade-in">
+          <div className="grid md:grid-cols-4 gap-3 stagger">
+            <KV label="Contracting entity" value={d.entityName} sub={d.entity} />
+            <KV label="Counterparties" value={(d.parties || []).map((p: any) => p.legalName).join(", ") || "—"} />
+            <KV label="Governing law" value={d.governingLaw || "—"} />
+            <KV label="Value" value={money(d.valueAmount, d.currency)} sub={d.valueBasis} />
+            <KV label="Annual value" value={money(d.annualValueAmount, d.currency)} />
+            <KV label="Payment terms" value={d.paymentTermsDays ? `${d.paymentTermsDays} days` : "—"} />
+            <KV label="Effective" value={date(d.effectiveDate)} />
+            <KV
+              label="Expiry"
+              value={date(d.expiryDate)}
+              sub={d.renewalType && d.renewalType !== "NONE" ? `${enumLabel(d.renewalType)} renewal` : undefined}
+            />
+            <KV label="Owner" value={d.owner || "—"} />
+            <KV label="Assigned lawyer" value={d.assignedLawyer || "—"} />
+            {d.liabilitySummary && <KV label="Liability" value={d.liabilitySummary} />}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <SectionTitle>Deal terms</SectionTitle>
+              {Object.keys(grouped).length === 0 ? (
+                <Empty>No structured attributes captured.</Empty>
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(grouped).map(([g, items]) => (
+                    <div key={g}>
+                      <div className="text-[11px] uppercase tracking-wide text-ink-faint mb-1">{g}</div>
+                      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                        {items.map((it) => (
+                          <div key={it.key}>
+                            <dt className="text-xs text-ink-faint">{it.label}</dt>
+                            <dd className="tabular">
+                              {typeof it.value === "boolean" ? (
+                                <Badge tone={it.value ? "ok" : "neutral"}>{it.value ? "Yes" : "No"}</Badge>
+                              ) : it.money ? (
+                                money(Number(it.value), d.currency)
+                              ) : (
+                                enumLabel(it.value)
+                              )}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+            <Card>
+              <SectionTitle>Clauses used</SectionTitle>
+              {(d.clausesUsed || []).length === 0 ? (
+                <Empty>No clause library links yet — assemble the document.</Empty>
+              ) : (
+                <ul className="space-y-1.5 text-sm">
+                  {(d.clausesUsed || []).map((u: any, i: number) => (
+                    <li key={i} className="flex items-center justify-between">
+                      <span>{u.concept}</span>
+                      <Badge
+                        tone={
+                          u.positionTier === "PREFERRED"
+                            ? "ok"
+                            : u.positionTier === "FALLBACK"
+                            ? "warn"
+                            : u.positionTier === "UNACCEPTABLE"
+                            ? "risk"
+                            : "neutral"
+                        }
+                      >
+                        {u.positionTier}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+            <ParticipantsCard contractId={id!} participants={d.participants || []} canEdit={canEdit} />
+          </div>
+          {(d.children || []).length > 0 && (
+            <Card>
+              <SectionTitle>Hierarchy</SectionTitle>
+              <ul className="text-sm space-y-1">
+                {(d.children || []).map((ch: any) => (
+                  <li key={ch.id}>
+                    <Link to={`/contracts/${ch.id}`} className="link">{ch.contractNumber}</Link>
+                    <span className="text-ink-faint"> — {ch.relationshipType} · {ch.title} · {ch.status}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {tab === "terms" && (
+        <Card className="!p-0 overflow-x-auto fade-in">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-ink-faint border-b border-border">
+                <th className="px-3 py-2 font-medium">Term</th>
+                <th className="px-3 py-2 font-medium">Effective value</th>
+                <th className="px-3 py-2 font-medium">Source</th>
+                <th className="px-3 py-2 font-medium">Provenance</th>
+                <th className="px-3 py-2 font-medium">Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(d.effectiveTerms || []).map((t: any, i: number) => (
+                <tr key={i} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2.5">{t.key}</td>
+                  <td className="px-3 py-2.5 tabular font-medium">{String(t.value)}</td>
+                  <td className="px-3 py-2.5 text-ink-soft">{t.sourceContractNumber}</td>
+                  <td className="px-3 py-2.5">
+                    {t.inherited && <Badge tone="neutral">inherited</Badge>}{" "}
+                    {t.overridden && <Badge tone="accent">overrides</Badge>}
+                    {!t.inherited && !t.overridden && <span className="text-ink-faint">own</span>}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Confidence value={t.extractionConfidence} verified={t.verified} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {tab === "document" && (
+        <div className="fade-in">
+        <div className="grid gap-4 items-stretch lg:grid-cols-[2fr_1fr] lg:h-[calc(0.9428*min(100vw-276px,1240px)+72px)]">
+          <div className="min-w-0 flex flex-col gap-3 lg:h-full">
+            <div className="min-w-0 flex-1 min-h-0"><DocumentPanel contractId={id!} /></div>
+            {(attachmentsQuery.data || []).length > 0 && (
+              <Card className="shrink-0">
+                <SectionTitle>Supporting documents</SectionTitle>
+                <div className="space-y-1.5">
+                  {(attachmentsQuery.data || []).map((a: any) => (
+                    <div key={a.id} className="flex items-center gap-2 rounded-[8px] border border-border p-2">
+                      <Icon.file width={15} height={15} className="shrink-0 text-ink-faint" />
+                      <span className="text-sm truncate flex-1" title={a.filename}>{a.filename}</span>
+                      <span className="text-xs text-ink-faint shrink-0">{(a.size / 1024).toFixed(0)} KB</span>
+                      <button
+                        className="btn shrink-0"
+                        style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+                        onClick={() => downloadAttachment(a.id, a.filename)}
+                      >
+                        <Icon.externalLink width={13} height={13} /> Download
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
+          <div className="min-w-0 lg:h-full lg:overflow-y-auto"><AiReviewPanel contractId={id!} /></div>
+        </div>
+        </div>
+      )}
+
+      {tab === "discussion" && (
+        <div className="fade-in">
+          <CommentThreads entityType="CONTRACT" entityId={id!} />
+        </div>
+      )}
+
+      {tab === "workflow" && (
+        <Card className="fade-in">
+          <SectionTitle
+            right={
+              !wf.data?.started && canEdit && (
+                <button className="btn btn-primary" onClick={beginSubmit} disabled={checking || startWf.isPending}>
+                  Start workflow
+                </button>
+              )
+            }
+          >
+            Workflow
+          </SectionTitle>
+          {wf.isLoading ? (
+            <Spinner />
+          ) : !wf.data?.started ? (
+            <Empty>No workflow running for this contract.</Empty>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-sm">
+                <span className="text-ink-faint">{wf.data.workflow}</span> · current state{" "}
+                <Badge tone="accent">{wf.data.currentState}</Badge> · {wf.data.status}
+                {wf.data.escalated && <Badge tone="risk">escalated</Badge>}
+              </div>
+              <div className="divide-y divide-border">
+                {(wf.data.tasks || []).map((t: any) => (
+                  <div key={t.id} className="py-2 text-sm flex items-center justify-between">
+                    <span>{t.state} · {t.type} · {t.assignee || "unassigned"}</span>
+                    <span className="text-ink-faint text-xs">
+                      {t.status} {t.outcome && `→ ${t.outcome}`} {t.overdue && <Badge tone="risk">overdue</Badge>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-ink-faint">Act on tasks from the Approvals screen.</p>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {tab === "obligations" && (
+        <Card className="!p-0 overflow-x-auto fade-in">
+          {(d.obligations || []).length === 0 ? (
+            <Empty>No obligations tracked.</Empty>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-faint border-b border-border">
+                  <th className="px-3 py-2 font-medium">Obligation</th>
+                  <th className="px-3 py-2 font-medium">Due</th>
+                  <th className="px-3 py-2 font-medium">Owner</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(d.obligations || []).map((o: any) => (
+                  <tr key={o.id} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2.5">{o.description}<div className="text-xs text-ink-faint">{o.type}</div></td>
+                    <td className="px-3 py-2.5 tabular">{date(o.dueDate)}</td>
+                    <td className="px-3 py-2.5">{o.owner || o.owningDepartment || "—"}</td>
+                    <td className="px-3 py-2.5"><Badge tone={statusTone(o.status)}>{o.status}</Badge></td>
+                    <td className="px-3 py-2.5"><Confidence value={o.extractionConfidence} verified={o.verified} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {tab === "relations" && (
+        <div className="space-y-4 fade-in">
+          <Card>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <SectionTitle>Contract relations</SectionTitle>
+                <p className="text-xs text-ink-faint mt-0.5">
+                  Explicit hierarchy, sourced precedents, and AI-identified relationships.
+                  Suggestions are matched on party name, signed entity and active period — confirm only what is real.
+                </p>
+              </div>
+              <button
+                className="btn btn-ai shrink-0"
+                onClick={() => detectRelations.mutate()}
+                disabled={detectRelations.isPending}
+              >
+                {detectRelations.isPending ? "Scanning contracts…" : "Detect with AI"}
+              </button>
+            </div>
+            {relations.isLoading && <Spinner />}
+            {detectRelations.error && (
+              <p className="text-xs text-[color:var(--risk)] mt-2">{(detectRelations.error as Error).message}</p>
+            )}
+
+            {/* hierarchy */}
+            {(d.parentContractId || (d.children || []).length > 0) && (
+              <div className="mt-4">
+                <div className="text-[11px] uppercase tracking-wide text-ink-faint mb-2">Hierarchy</div>
+                <div className="space-y-1.5 text-sm">
+                  {d.parentContractId && (
+                    <div className="flex items-center gap-2">
+                      <Badge tone="neutral">{d.relationshipType ? relationLabel(d.relationshipType) : "Parent"}</Badge>
+                      <Link to={`/contracts/${d.parentContractId}`} className="link">Parent contract</Link>
+                    </div>
+                  )}
+                  {(d.children || []).map((ch: any) => (
+                    <div key={ch.id} className="flex items-center gap-2">
+                      <Badge tone="neutral">{ch.relationshipType ? relationLabel(ch.relationshipType) : "Child"}</Badge>
+                      <Link to={`/contracts/${ch.id}`} className="link">{ch.contractNumber} — {ch.title}</Link>
+                      <Badge tone={statusTone(ch.status)}>{enumLabel(ch.status)}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* AI suggestions */}
+          {(relations.data?.suggested || []).length > 0 && (
+            <Card>
+              <SectionTitle>AI-suggested — awaiting your confirmation</SectionTitle>
+              <div className="space-y-3 mt-2">
+                {(relations.data.suggested as any[]).map((r) => (
+                  <div key={r.id} className="border border-[color:var(--ai)]/40 rounded-lg p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge tone="ai">{relationLabel(r.relationType)}</Badge>
+                          <Link to={`/contracts/${r.otherContractId}`} className="link font-medium">
+                            {r.contractNumber} — {r.title}
+                          </Link>
+                          <Badge tone="neutral">{enumLabel(r.type)}</Badge>
+                          <Badge tone={statusTone(r.status)}>{enumLabel(r.status)}</Badge>
+                        </div>
+                        {typeof r.confidence === "number" && (
+                          <div className="text-xs text-ink-faint mt-1">
+                            Confidence {Math.round(r.confidence * 100)}%
+                          </div>
+                        )}
+                        <ul className="text-xs text-ink-faint mt-1.5 list-disc pl-4 space-y-0.5">
+                          {(Array.isArray(r.reasons) ? r.reasons : []).map((x: string, j: number) => (
+                            <li key={j}>{x}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <button
+                          className="btn"
+                          disabled={decideRelation.isPending}
+                          onClick={() => decideRelation.mutate({ relId: r.id, decision: "confirm" })}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          className="btn"
+                          disabled={decideRelation.isPending}
+                          onClick={() => decideRelation.mutate({ relId: r.id, decision: "reject" })}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* confirmed relations */}
+          {(relations.data?.confirmed || []).length > 0 && (
+            <Card>
+              <SectionTitle>Confirmed relations</SectionTitle>
+              <div className="space-y-2 mt-2">
+                {(relations.data.confirmed as any[]).map((r) => (
+                  <div key={r.id} className="flex items-center gap-2 flex-wrap text-sm border-b border-border pb-2 last:border-0">
+                    <Badge tone="ok">{relationLabel(r.relationType)}</Badge>
+                    <Link to={`/contracts/${r.otherContractId}`} className="link font-medium">
+                      {r.contractNumber} — {r.title}
+                    </Link>
+                    <Badge tone={statusTone(r.status)}>{enumLabel(r.status)}</Badge>
+                    {r.decidedBy && <span className="text-xs text-ink-faint">confirmed by {r.decidedBy}</span>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* precedent basis */}
+          <Card>
+            <SectionTitle>Precedent basis</SectionTitle>
+            {(d.precedents || []).length === 0 ? (
+              <Empty>No precedent links.</Empty>
+            ) : (
+              <div className="space-y-3">
+                {(d.precedents || []).map((p: any, i: number) => (
+                  <div key={i} className="border-b border-border pb-3 last:border-0">
+                    <div className="flex items-center justify-between">
+                      <Link to={`/contracts/${p.precedentContractId}`} className="link font-medium">
+                        {p.precedentNumber} — {p.precedentTitle}
+                      </Link>
+                      <Badge tone="ai">match {Math.round(p.matchScore * 100)}%</Badge>
+                    </div>
+                    <ul className="text-xs text-ink-faint mt-1 list-disc pl-4">
+                      {(Array.isArray(p.matchReasons) ? p.matchReasons : []).map((r: string, j: number) => (
+                        <li key={j}>{r}</li>
+                      ))}
+                    </ul>
+                    <div className="text-xs mt-1">Used for {p.usedFor} · {p.acknowledged ? "acknowledged" : "not acknowledged"}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {tab === "risks" && (
+        <RiskRegister
+          contractId={id!}
+          onLocate={(quote) => {
+            useHighlight.getState().locate(quote);
+            setTab("document");
+          }}
+        />
+      )}
+
+      {tab === "audit" && (
+        <Card className="!p-0 overflow-x-auto fade-in">
+          {audit.isLoading ? (
+            <Spinner />
+          ) : (audit.data || []).length === 0 ? (
+            <Empty>No audit events.</Empty>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-ink-faint border-b border-border">
+                  <th className="px-3 py-2 font-medium">When</th>
+                  <th className="px-3 py-2 font-medium">Action</th>
+                  <th className="px-3 py-2 font-medium">Actor</th>
+                  <th className="px-3 py-2 font-medium">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(audit.data || []).map((e: any) => (
+                  <tr key={e.id} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 tabular text-xs">{new Date(e.occurredAt).toLocaleString()}</td>
+                    <td className="px-3 py-2">{e.action}</td>
+                    <td className="px-3 py-2">{e.actor} {e.actorType === "AI" && <Badge tone="ai">AI</Badge>}</td>
+                    <td className="px-3 py-2 text-xs text-ink-faint">{e.after ? JSON.stringify(e.after) : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {(checking || qcError || quickCheck) && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="card w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-medium flex items-center gap-2">
+                <Icon.sparkle width={16} height={16} /> AI quick check
+              </h2>
+              <Badge tone="ai">required before submit</Badge>
+            </div>
+
+            {checking && <Spinner label="The AI is reviewing the draft against all check points…" />}
+
+            {!checking && qcError && (
+              <>
+                <p className="text-sm" style={{ color: "var(--risk)" }}>{qcError}</p>
+                <div className="flex gap-2 justify-end">
+                  <button className="btn" onClick={() => { setQcError(null); setQuickCheck(null); }}>Cancel</button>
+                  <button
+                    className="btn btn-primary"
+                    disabled={startWf.isPending}
+                    onClick={() => { setQcError(null); setQuickCheck(null); startWf.mutate(); }}
+                  >
+                    Submit without check
+                  </button>
+                </div>
+              </>
+            )}
+
+            {!checking && quickCheck && (
+              <>
+                {quickCheck.criticalCount > 0 ? (
+                  <div className="rounded-[8px] px-3 py-2 text-sm" style={{ background: "color-mix(in srgb, var(--risk) 12%, transparent)", color: "var(--risk)" }}>
+                    Warning: {quickCheck.criticalCount} critical issue{quickCheck.criticalCount > 1 ? "s" : ""} found. You can still submit, but reviewers will see these findings.
+                  </div>
+                ) : (
+                  <div className="rounded-[8px] px-3 py-2 text-sm" style={{ background: "color-mix(in srgb, var(--ok) 12%, transparent)" }}>
+                    {(quickCheck.findings || []).length} issue{(quickCheck.findings || []).length === 1 ? "" : "s"} found — no critical issues.
+                  </div>
+                )}
+                {(quickCheck.findings || []).length > 0 && (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {[...quickCheck.findings]
+                      .sort((a: any, b: any) => sevRank(b.severity) - sevRank(a.severity))
+                      .map((f: any, i: number) => (
+                        <div key={i} className="rounded-[8px] border p-2.5">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-sm font-medium">{f.title}</span>
+                            <Badge tone={riskTone(f.severity) as any}>{f.severity || "MEDIUM"}</Badge>
+                          </div>
+                          <div className="text-xs text-ink-soft">{f.detail}</div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                <div className="text-[11px] text-ink-faint">
+                  Findings are also recorded in the risk register and visible to reviewers.
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button className="btn" onClick={() => setQuickCheck(null)}>
+                    Go back
+                  </button>
+                  <button className="btn btn-primary" disabled={startWf.isPending} onClick={() => { setQuickCheck(null); startWf.mutate(); }}>
+                    {quickCheck.criticalCount > 0 ? "Submit anyway" : "Submit for approval"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ParticipantsCard({
+  contractId,
+  participants,
+  canEdit,
+}: {
+  contractId: string;
+  participants: any[];
+  canEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const [adding, setAdding] = useState(false);
+  const [userId, setUserId] = useState("");
+  const users = useQuery({ queryKey: ["users-ref"], queryFn: () => api("/refdata/users"), enabled: adding });
+  const add = useMutation({
+    mutationFn: () => api(`/contracts/${contractId}/participants`, { method: "POST", json: { userId, role: "VIEWER" } }),
+    onSuccess: () => { setAdding(false); setUserId(""); qc.invalidateQueries({ queryKey: ["contract", contractId] }); },
+  });
+  const remove = useMutation({
+    mutationFn: (uid: string) => api(`/contracts/${contractId}/participants/${uid}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["contract", contractId] }),
+  });
+
+  return (
+    <Card>
+      <SectionTitle right={canEdit && !adding ? <button className="link text-xs" onClick={() => setAdding(true)}>add person</button> : undefined}>
+        People with access
+      </SectionTitle>
+      {participants.length === 0 && !adding ? (
+        <Empty>Only the owner and assigned lawyer.</Empty>
+      ) : (
+        <ul className="space-y-1.5 text-sm">
+          {participants.map((p: any) => (
+            <li key={p.userId} className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full grid place-items-center text-[10px] font-medium text-white shrink-0" style={{ background: "var(--ink-faint)" }}>
+                  {(p.name || "?").slice(0, 1)}
+                </span>
+                {p.name} <Badge tone="neutral">{p.role.toLowerCase()}</Badge>
+              </span>
+              {canEdit && (
+                <button className="link text-xs" onClick={() => remove.mutate(p.userId)}>remove</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {adding && (
+        <div className="flex gap-2 mt-2">
+          <select className="input" value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <option value="">— choose —</option>
+            {(users.data || []).map((u: any) => (
+              <option key={u.id} value={u.id}>{u.displayName}</option>
+            ))}
+          </select>
+          <button className="btn btn-primary" disabled={!userId || add.isPending} onClick={() => add.mutate()}>Add</button>
+          <button className="btn" onClick={() => setAdding(false)}>Cancel</button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function KV({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+  return (
+    <div className="card p-3 lift">
+      <div className="text-xs text-ink-faint mb-0.5">{label}</div>
+      <div className="text-sm tabular">{value}</div>
+      {sub && <div className="text-xs text-ink-faint mt-0.5 capitalize">{sub}</div>}
+    </div>
+  );
+}

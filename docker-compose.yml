@@ -1,0 +1,92 @@
+name: clm-platform
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clm}
+      POSTGRES_USER: ${POSTGRES_USER:-clm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clm_local_pw}
+    ports:
+      - "${CLM_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - clm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clm} -d ${POSTGRES_DB:-clm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  word-editor:
+    build:
+      context: ../word-editor
+      dockerfile: ../AI-CLM/docker/word-editor.slim.Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      AUTH_TOKEN: ${WORD_EDITOR_TOKEN:-clm-editor-shared-secret}
+      PUBLIC_BASE_URL: ${WORD_EDITOR_PUBLIC_URL:-http://localhost:3100}
+      EMBED_ALLOW_ORIGINS: ${CLM_EMBED_ORIGINS:-http://localhost:3000}
+    volumes:
+      - clm_editordata:/app/data
+    ports:
+      - "${CLM_EDITOR_PORT:-3100}:3001"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-clm}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-clm}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-clm_local_pw}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      CLM_JWT_SECRET: ${CLM_JWT_SECRET:-change-me-to-a-long-random-secret-string-at-least-32-bytes}
+      CLM_JWT_TTL_MINUTES: ${CLM_JWT_TTL_MINUTES:-720}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_MODEL_REASONING: ${LLM_MODEL_REASONING:-}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-}
+      LLM_EMBEDDING_DIM: ${LLM_EMBEDDING_DIM:-1536}
+      WORD_EDITOR_INTERNAL_URL: http://word-editor:3001
+      WORD_EDITOR_PUBLIC_URL: ${WORD_EDITOR_PUBLIC_URL:-http://localhost:3100}
+      WORD_EDITOR_TOKEN: ${WORD_EDITOR_TOKEN:-clm-editor-shared-secret}
+    ports:
+      - "${CLM_BACKEND_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q -O - http://localhost:8080/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: /api
+    depends_on:
+      - backend
+    ports:
+      - "${CLM_FRONTEND_PORT:-3000}:80"
+
+volumes:
+  clm_pgdata:
+  clm_editordata:
