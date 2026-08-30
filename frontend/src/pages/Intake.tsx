@@ -482,7 +482,7 @@ export default function Intake() {
       await api(`/workflow/start/${result.contractId}`, { method: "POST" });
       qc.invalidateQueries({ queryKey: ["contracts"] });
       qc.invalidateQueries({ queryKey: ["me-summary"] });
-      nav(`/contracts/${result.contractId}`);
+      nav(`/contracts/${result.contractId}`, { state: { justSubmitted: true } });
     } catch (e: any) {
       setSubmitError(e.message);
     } finally {

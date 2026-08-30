@@ -240,6 +240,15 @@ public class WorkflowService {
         m.put("escalated", wi.isEscalated);
         m.put("availableEvents", availableEvents(wi));
         m.put("tasks", taskList);
+        WorkflowDefinition wfDef = definitions.findById(wi.workflowDefinitionId).orElse(null);
+        if (wfDef != null) {
+            JsonNode d = Json.read(wfDef.definition);
+            List<Map<String, Object>> states = new ArrayList<>();
+            for (JsonNode s : d.path("states")) {
+                states.add(Map.of("key", s.path("key").asText(), "type", s.path("type").asText("task")));
+            }
+            m.put("states", states);
+        }
         return m;
     }
 

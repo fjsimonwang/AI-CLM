@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import { api, apiBlob, money, date, usePerms, useAuth } from "../api";
 import { Card, SectionTitle, Badge, Spinner, Empty, Tabs, statusTone, riskTone, Confidence } from "../components/ui";
 import { BriefingCard } from "../components/BriefingCard";
@@ -45,8 +45,10 @@ const renderSummaryWithSession = (summary: string, sessionId: string) => {
 
 export default function ContractDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const qc = useQueryClient();
   const can = usePerms();
+  const [justSubmitted, setJustSubmitted] = useState(() => !!(location.state as any)?.justSubmitted);
   const [tab, setTab] = useState("overview");
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
@@ -105,8 +107,10 @@ export default function ContractDetail() {
   const startWf = useMutation({
     mutationFn: () => api(`/workflow/start/${id}`, { method: "POST" }),
     onSuccess: () => {
+      setJustSubmitted(true);
       qc.invalidateQueries({ queryKey: ["wf", id] });
       qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
     },
   });
   const setStatus = useMutation({
@@ -165,8 +169,128 @@ export default function ContractDetail() {
   const canEdit = can("EDIT_CONTRACT");
   const isRequestor = !!user && (user.id === d.ownerUserId || user.id === (d as any).createdBy);
 
+  const dismissConfirm = () => {
+    setJustSubmitted(false);
+    try { window.history.replaceState({}, ""); } catch { /* ignore */ }
+  };
+
+  const wfData: any = wf.data || {};
+  const stages: { key: string; label: string }[] = (wfData.states || [])
+    .filter((s: any) => s.key !== "closed_rejected")
+    .map((s: any) => ({
+      key: s.key,
+      label: s.key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
+    }));
+  const currentIdx = stages.findIndex((s) => s.key === wfData.currentState);
+  const openTasks: any[] = (wfData.tasks || []).filter((t: any) => t.status === "OPEN");
+  const activeTask = openTasks.find((t: any) => t.state === wfData.currentState) || openTasks[0];
+
   return (
     <div className="space-y-4">
+      {justSubmitted && (
+        <div
+          className="confirm-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(5px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) dismissConfirm(); }}
+        >
+          <div className="confirm-card card w-full max-w-md p-8 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="relative mx-auto mb-4" style={{ width: 72, height: 72 }}>
+              <span
+                className="confirm-halo absolute inset-0 rounded-full"
+                style={{ background: "color-mix(in srgb, var(--ok) 35%, transparent)" }}
+              />
+              <svg className="confirm-check relative" viewBox="0 0 52 52" width={72} height={72}>
+                <circle cx="26" cy="26" r="24" fill="none" stroke="var(--ok)" strokeWidth="2.5" />
+                <path
+                  d="M15 27 l8 8 l15 -16"
+                  fill="none" stroke="var(--ok)" strokeWidth="3.5"
+                  strokeLinecap="round" strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h2 className="text-lg font-medium">Submitted successfully</h2>
+            <p className="text-sm text-ink-soft mt-1">
+              Your request number{" "}
+              <span className="font-medium tabular text-ink">{d.requestNumber || d.contractNumber}</span>{" "}
+              has been submitted successfully.
+            </p>
+
+            <div className="mt-6 mb-2 text-left">
+              <div className="text-xs font-medium text-ink-faint uppercase tracking-wide mb-3 text-left">
+                Approval workflow
+              </div>
+              {stages.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-ink-faint py-2">
+                  <span className="spin inline-block w-3.5 h-3.5 rounded-full border-2 border-border border-t-[color:var(--accent)]" />
+                  Preparing approval workflow…
+                </div>
+              ) : (
+                <ol>
+                  {stages.map((st, i) => {
+                    const done = currentIdx >= 0 && i < currentIdx;
+                    const active = i === currentIdx;
+                    const last = i === stages.length - 1;
+                    return (
+                      <li key={st.key} className="confirm-stage flex gap-3" style={{ animationDelay: `${320 + i * 160}ms` }}>
+                        <div className="flex flex-col items-center" style={{ width: 22 }}>
+                          {done ? (
+                            <span className="w-[22px] h-[22px] rounded-full flex items-center justify-center" style={{ background: "var(--ok)" }}>
+                              <svg viewBox="0 0 12 12" width={11} height={11}>
+                                <path d="M2.5 6.5 L5 9 L9.5 3.5" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </span>
+                          ) : active ? (
+                            <span
+                              className="confirm-ring w-[22px] h-[22px] rounded-full flex items-center justify-center"
+                              style={{ border: "2px solid var(--accent)", background: "var(--surface)" }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />
+                            </span>
+                          ) : (
+                            <span
+                              className="w-[22px] h-[22px] rounded-full"
+                              style={{ border: "2px solid var(--border)", background: "var(--surface)" }}
+                            />
+                          )}
+                          {!last && (
+                            <span
+                              className="w-[2px] flex-1 my-0.5 rounded"
+                              style={{ minHeight: 18, background: done ? "var(--ok)" : "var(--border)" }}
+                            />
+                          )}
+                        </div>
+                        <div style={{ paddingTop: 1, paddingBottom: last ? 0 : 16 }}>
+                          <div className={`text-sm ${done || active ? "text-ink" : "text-ink-faint"}`}>{st.label}</div>
+                          {active && (
+                            <div className="text-xs mt-0.5" style={{ color: "var(--accent)" }}>
+                              In progress
+                            </div>
+                          )}
+                          {done && (
+                            <div className="text-xs mt-0.5" style={{ color: "var(--ok)" }}>
+                              Completed
+                            </div>
+                          )}
+                          {active && activeTask?.dueAt && (
+                            <div className="text-xs text-ink-faint mt-0.5">
+                              Due {date(activeTask.dueAt)}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+
+            <button className="btn btn-primary mt-4 w-full justify-center" onClick={dismissConfirm}>
+              View contract
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <Link to="/contracts" className="link text-sm flex items-center gap-1">
