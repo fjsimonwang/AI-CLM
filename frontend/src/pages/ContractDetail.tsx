@@ -55,7 +55,9 @@ export default function ContractDetail() {
     (location.state as any)?.from === "approvals"
       ? { to: "/approvals", label: "Approvals" }
       : { to: "/contracts", label: "Contracts" };
-  const [tab, setTab] = useState("overview");
+  const validTabs = ["overview", "terms", "document", "discussion", "workflow", "obligations", "relations", "risks", "audit"];
+  const initialTab = new URLSearchParams(location.search).get("tab");
+  const [tab, setTab] = useState(initialTab && validTabs.includes(initialTab) ? initialTab : "overview");
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"

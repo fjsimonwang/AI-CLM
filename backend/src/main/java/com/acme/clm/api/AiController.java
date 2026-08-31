@@ -262,6 +262,14 @@ public class AiController {
         return out;
     }
 
+    /** The heavier "deeper analysis" insight — generated only when the user asks for it. */
+    @GetMapping("/insight/deep")
+    public Map<String, Object> insightDeep(@RequestParam(defaultValue = "false") boolean force) {
+        Map<String, Object> out = new LinkedHashMap<>(insightService.deepView(current.id(), force));
+        out.put("modelLive", ai.modelIsLive());
+        return out;
+    }
+
     public record HelpRequest(String message, String page, String pageContext, List<Map<String, String>> history) {}
 
     /** Q&A about using the platform (navigation, operations, support, lifecycle). Advisory only. */

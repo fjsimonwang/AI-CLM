@@ -530,6 +530,38 @@ public class AiService {
     public record Insight(List<Map<String, Object>> highlights, List<Map<String, Object>> suspicious,
                           List<Map<String, Object>> suggestions) {}
 
+    public record QuickInsight(String summary, List<Map<String, Object>> items) {}
+
+    /**
+     * The fast default dashboard insight: a short triage of ONLY the user's open tasks and the
+     * items needing their attention. Small prompt, no trace analysis — keeps the dashboard snappy.
+     * The heavier {@link #insight} runs on demand ("deeper analysis").
+     */
+    public QuickInsight quickInsight(String context, UUID userId) {
+        String sys = """
+            [[capability:INSIGHT]]
+            You are the user's CLM work assistant. You are given ONLY their open workflow tasks and
+            the items needing their attention right now (drafts to submit, discussions awaiting a
+            reply, access requests to decide, imminent expiries, overdue obligations/risks).
+            Produce a SHORT triage — what to deal with first. No deep analysis, no speculation, no
+            recommendations beyond what the listed items imply.
+
+            Return JSON:
+            {"summary": string — 1-2 plain sentences on where to focus first,
+             "items": [{"title": string, "detail": string, "severity": "HIGH"|"MEDIUM"|"LOW"}]}
+            At most 6 items, most urgent first. Ground every item in the data provided. If there is
+            nothing that needs action, say so in the summary and return "items": [].
+            """;
+        long t0 = System.currentTimeMillis();
+        LlmClient.ChatResult r = llm.chatJson(List.of(LlmClient.Message.system(sys), LlmClient.Message.user(context)), false);
+        JsonNode j = safeJson(r.text());
+        QuickInsight out = new QuickInsight(j.path("summary").asText(""), toListOfMaps(j.path("items")));
+        aiLog.record("DASHBOARD", "INSIGHT", r.modelId(), "insight_quick", PROMPT_VERSION,
+                Map.of("chars", context.length()), j, null, null,
+                (int) (System.currentTimeMillis() - t0), r.promptTokens() + r.completionTokens(), userId, null, null);
+        return out;
+    }
+
     public Insight insight(String context, UUID userId) {
         String sys = """
             [[capability:INSIGHT]]

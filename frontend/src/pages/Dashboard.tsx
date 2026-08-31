@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, money, date, usePending } from "../api";
+import { api, money, date, usePending, usePerms } from "../api";
 import { Card, SectionTitle, Stat, Badge, Spinner, Empty } from "../components/ui";
 import { Icon } from "../components/icons";
 import { AiInsight } from "../components/AiInsight";
@@ -31,7 +31,7 @@ const SECTION_LABELS: Record<string, string> = {
   "risk": "Risk distribution",
   "migration": "Migration health",
   "inquiry": "Ask the portfolio",
-  "tasks": "My open tasks",
+  "tasks": "My open items",
 };
 
 export default function Dashboard() {
@@ -43,6 +43,8 @@ export default function Dashboard() {
   const me = usePending();
   const cfg = useQuery({ queryKey: ["dash-config"], queryFn: () => api("/me/dashboard-config") });
   const mine: any = me.data || {};
+  const can = usePerms();
+  const isApprover = can("APPROVE");
 
   const [layout, setLayout] = useState<{ key: string; visible: boolean; size?: "full" | "half" }[] | null>(null);
   const [editing, setEditing] = useState(false);
@@ -113,7 +115,7 @@ export default function Dashboard() {
   const renders: Record<string, () => any> = {
     "ai-insight": () => <AiInsight />,
     "attention": () => (
-      <AttentionCard mine={mine} editing={editing} />
+      <AttentionCard mine={mine} editing={editing} isApprover={isApprover} />
     ),
     "stats": () => (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -167,38 +169,63 @@ export default function Dashboard() {
         </div>
       </Card>
     ),
-    "tasks": () => (
-      <Card>
-        <SectionTitle right={<Link className="link text-xs" to="/approvals">All approvals</Link>}>My open tasks</SectionTitle>
-        {me.isLoading ? (
-          <Spinner />
-        ) : (mine.openTasks || []).length === 0 ? (
-          <Empty>Nothing waiting on you.</Empty>
-        ) : (
-          <div className="divide-y divide-border">
-            {(mine.openTasks || []).map((t: any) => (
-              <div key={t.id} className="py-2.5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <Link to={`/contracts/${t.contractId}`} className="link text-sm font-medium">
-                    {t.contractNumber}
-                  </Link>
-                  {t.discussionUpdate && (
-                    <span className="inline-flex align-[-2px] ml-1.5" title="New discussion activity on this contract">
-                      <Icon.message width={13} height={13} style={{ color: "var(--accent)" }} />
-                    </span>
-                  )}
-                  <span className="text-sm text-ink-soft"> · {t.contractTitle}</span>
-                  <div className="text-xs text-ink-faint">
-                    {t.state} · {t.type} · due {date(t.dueAt)} {t.overdue && <Badge tone="risk">overdue</Badge>}
+    "tasks": () => {
+      const rejected = (mine.myRejected || []) as any[];
+      const openTasks = (mine.openTasks || []) as any[];
+      const nothing = openTasks.length === 0 && rejected.length === 0;
+      return (
+        <Card>
+          <SectionTitle
+            right={isApprover ? <Link className="link text-xs" to="/approvals">All approvals</Link> : undefined}
+          >
+            My open items
+          </SectionTitle>
+          {me.isLoading ? (
+            <Spinner />
+          ) : nothing ? (
+            <Empty>Nothing waiting on you.</Empty>
+          ) : (
+            <div className="divide-y divide-border">
+              {rejected.map((c: any) => (
+                <div key={c.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link to={`/contracts/${c.id}?tab=workflow`} className="link text-sm font-medium">
+                      {c.contractNumber}
+                    </Link>
+                    <span className="text-sm text-ink-soft"> · {c.title}</span>
+                    <div className="text-xs text-ink-faint">
+                      <Badge tone="risk">rejected</Badge> review the reason and revise
+                    </div>
                   </div>
+                  <Link to={`/contracts/${c.id}?tab=workflow`} className="btn">Review</Link>
                 </div>
-                <Link to="/approvals" className="btn">Review</Link>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    ),
+              ))}
+              {openTasks.map((t: any) => (
+                <div key={t.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link to={`/contracts/${t.contractId}`} className="link text-sm font-medium">
+                      {t.contractNumber}
+                    </Link>
+                    {t.discussionUpdate && (
+                      <span className="inline-flex align-[-2px] ml-1.5" title="New discussion activity on this contract">
+                        <Icon.message width={13} height={13} style={{ color: "var(--accent)" }} />
+                      </span>
+                    )}
+                    <span className="text-sm text-ink-soft"> · {t.contractTitle}</span>
+                    <div className="text-xs text-ink-faint">
+                      {t.state} · {t.type} · due {date(t.dueAt)} {t.overdue && <Badge tone="risk">overdue</Badge>}
+                    </div>
+                  </div>
+                  <Link to={isApprover ? "/approvals" : `/contracts/${t.contractId}?tab=workflow`} className="btn">
+                    Review
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      );
+    },
   };
 
   function renderSection(key: string, editMode: boolean) {
@@ -356,9 +383,10 @@ function EditShell({ label, size, onSize, children, onHide, onDelete }: {
   );
 }
 
-function AttentionCard({ mine, editing }: { mine: any; editing: boolean }) {
+function AttentionCard({ mine, editing, isApprover }: { mine: any; editing: boolean; isApprover: boolean }) {
   const attention =
-    (mine.openTasks || []).length + (mine.discussionsAwaiting || 0) + (mine.accessToDecide || []).length + (mine.myDrafts || []).length;
+    (mine.openTasks || []).length + (mine.discussionsAwaiting || 0) + (mine.accessToDecide || []).length
+    + (mine.myDrafts || []).length + (mine.myRejected || []).length;
   if (attention === 0 && !editing) return null;
   return (
     <Card className="border-[color:var(--accent)]">
@@ -373,8 +401,14 @@ function AttentionCard({ mine, editing }: { mine: any; editing: boolean }) {
               <div className="min-w-0"><div className="text-sm font-medium truncate">{c.contractNumber}</div><div className="text-xs text-ink-faint">Draft — review & submit for approval</div></div>
             </Link>
           ))}
+          {(mine.myRejected || []).map((c: any) => (
+            <Link key={c.id} to={`/contracts/${c.id}?tab=workflow`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
+              <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--risk) 15%, transparent)", color: "var(--risk)" }}><Icon.x width={16} height={16} /></span>
+              <div className="min-w-0"><div className="text-sm font-medium truncate">{c.contractNumber}</div><div className="text-xs text-ink-faint">Rejected — review the reason and revise</div></div>
+            </Link>
+          ))}
           {(mine.openTasks || []).map((t: any) => (
-            <Link key={t.id} to="/approvals" className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
+            <Link key={t.id} to={isApprover ? "/approvals" : `/contracts/${t.contractId}?tab=workflow`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
               <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--ok) 15%, transparent)", color: "var(--ok)" }}><Icon.checkCircle width={16} height={16} /></span>
               <div className="min-w-0"><div className="text-sm font-medium truncate">{t.contractNumber}</div><div className="text-xs text-ink-faint">{t.state} · {t.type} · due {date(t.dueAt)}{t.overdue ? " · overdue" : ""}</div></div>
             </Link>

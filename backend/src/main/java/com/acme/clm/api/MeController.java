@@ -125,6 +125,12 @@ public class MeController {
                 .map(c -> Map.<String, Object>of("id", c.id, "contractNumber", c.contractNumber, "title", c.title))
                 .toList();
 
+        // contracts of mine that were rejected — the requestor needs to review and revise/resubmit
+        List<Map<String, Object>> myRejected = contracts.findAll().stream()
+                .filter(c -> (me.equals(c.ownerUserId) || me.equals(c.createdBy)) && "CLOSED_REJECTED".equals(c.status))
+                .map(c -> Map.<String, Object>of("id", c.id, "contractNumber", c.contractNumber, "title", c.title))
+                .toList();
+
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("openTasks", tasks);
         out.put("openTaskCount", tasks.size());
@@ -133,7 +139,9 @@ public class MeController {
         out.put("accessToDecide", toDecide);
         out.put("accessToDecideCount", toDecide.size());
         out.put("myDrafts", myDrafts);
-        out.put("attentionCount", tasks.size() + discussionsAwaiting + toDecide.size() + myDrafts.size());
+        out.put("myRejected", myRejected);
+        out.put("attentionCount",
+                tasks.size() + discussionsAwaiting + toDecide.size() + myDrafts.size() + myRejected.size());
         return out;
     }
 
