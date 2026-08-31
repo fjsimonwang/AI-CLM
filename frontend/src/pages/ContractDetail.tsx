@@ -422,7 +422,7 @@ export default function ContractDetail() {
                   {Object.entries(grouped).map(([g, items]) => (
                     <div key={g}>
                       <div className="text-[11px] uppercase tracking-wide text-ink-faint mb-1">{g}</div>
-                      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
                         {items.map((it) => (
                           <div key={it.key}>
                             <dt className="text-xs text-ink-faint">{it.label}</dt>

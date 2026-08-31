@@ -25,7 +25,7 @@ export default function AiLog() {
         <div>
           <h1 className="text-xl font-medium">AI activity</h1>
           <p className="text-sm text-ink-faint">
-            Every AI call is logged with model, prompt version, confidence and outcome — and is individually reversible.
+            Every AI call is logged with prompt version, confidence and outcome — and is individually reversible.
           </p>
         </div>
       </div>
@@ -42,7 +42,6 @@ export default function AiLog() {
                 <th className="px-3 py-2 font-medium">When</th>
                 <th className="px-3 py-2 font-medium">Surface</th>
                 <th className="px-3 py-2 font-medium">Capability</th>
-                <th className="px-3 py-2 font-medium">Model</th>
                 <th className="px-3 py-2 font-medium">Prompt</th>
                 <th className="px-3 py-2 font-medium">Conf.</th>
                 <th className="px-3 py-2 font-medium">Latency</th>
@@ -56,7 +55,6 @@ export default function AiLog() {
                   <td className="px-3 py-2 tabular text-xs">{new Date(a.occurredAt).toLocaleString()}</td>
                   <td className="px-3 py-2">{a.surface}</td>
                   <td className="px-3 py-2">{a.capability}</td>
-                  <td className="px-3 py-2 text-xs">{a.modelId}</td>
                   <td className="px-3 py-2 text-xs">{a.promptId}@{a.promptVersion}</td>
                   <td className="px-3 py-2 tabular">{a.confidence != null ? `${Math.round(a.confidence * 100)}%` : "—"}</td>
                   <td className="px-3 py-2 tabular">{a.latencyMs != null ? `${a.latencyMs}ms` : "—"}</td>

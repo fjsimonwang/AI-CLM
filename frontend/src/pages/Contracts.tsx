@@ -43,7 +43,7 @@ function ContractList({ f, set, inquiryActive, onClearInquiry }: {
   });
 
   return (
-    <div className="space-y-3 h-[calc(100vh-160px)] overflow-y-auto pr-1 pb-20">
+    <div className="space-y-3 max-lg:h-auto max-lg:overflow-visible lg:h-[calc(100vh-160px)] lg:overflow-y-auto pr-1 pb-20">
       {inquiryActive && (
         <div className="flex items-center justify-between gap-2 rounded-[8px] px-3 py-2 text-xs"
           style={{ border: "1px solid var(--accent)", background: "var(--accent-soft)" }}>

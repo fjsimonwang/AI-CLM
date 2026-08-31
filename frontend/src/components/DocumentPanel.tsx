@@ -253,7 +253,7 @@ export function DocumentPanel({ contractId, fullPage }: { contractId: string; fu
       <div
         className={
           fullPage
-            ? "card overflow-hidden flex-1 min-h-0"
+            ? "card overflow-hidden flex-1 min-h-0 max-lg:h-[70vh] max-lg:flex-none"
             : "card overflow-hidden h-[70vh] lg:h-auto lg:flex-1 lg:min-h-0"
         }
       >
