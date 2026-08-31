@@ -232,6 +232,8 @@ public class ContractService {
         m.put("riskScore", c.riskScore);
         m.put("source", c.source);
         m.put("summary", c.summary);
+        m.put("updatedAt", c.updatedAt == null ? c.createdAt : c.updatedAt);
+        m.put("updatedBy", userName(c.updatedBy == null ? c.createdBy : c.updatedBy));
         return m;
     }
 

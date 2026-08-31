@@ -49,6 +49,12 @@ export default function ContractDetail() {
   const qc = useQueryClient();
   const can = usePerms();
   const [justSubmitted, setJustSubmitted] = useState(() => !!(location.state as any)?.justSubmitted);
+  // Where the "back" link points — set by the page that linked here (e.g. Approvals) so the
+  // user returns where they came from rather than always to the contract register.
+  const backTo =
+    (location.state as any)?.from === "approvals"
+      ? { to: "/approvals", label: "Approvals" }
+      : { to: "/contracts", label: "Contracts" };
   const [tab, setTab] = useState("overview");
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
@@ -318,8 +324,8 @@ export default function ContractDetail() {
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <Link to="/contracts" className="link text-sm flex items-center gap-1">
-            <Icon.chevronLeft width={14} height={14} /> Contracts
+          <Link to={backTo.to} className="link text-sm flex items-center gap-1">
+            <Icon.chevronLeft width={14} height={14} /> {backTo.label}
           </Link>
           <h1 className="text-xl font-medium mt-1">{d.title}</h1>
           <div className="text-sm text-ink-faint flex flex-wrap items-center gap-2 mt-1">

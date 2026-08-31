@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { money, date } from "../api";
+import { money, date, dateTime } from "../api";
 import { Badge, Card, statusTone, riskTone, Empty } from "./ui";
 import { Icon } from "./icons";
 
@@ -88,6 +88,16 @@ const COLUMNS: ColDef[] = [
     key: "riskTier", label: "Risk", kind: "select", minWidth: 110, options: ["LOW", "MEDIUM", "HIGH"],
     raw: (c) => c.riskTier,
     render: (c) => <Badge tone={riskTone(c.riskTier)}>{c.riskTier || "—"}</Badge>,
+  },
+  {
+    key: "updatedAt", label: "Last updated", kind: "date", minWidth: 170,
+    raw: (c) => c.updatedAt,
+    render: (c) => <span className="tabular whitespace-nowrap">{dateTime(c.updatedAt)}</span>,
+  },
+  {
+    key: "updatedBy", label: "Last updated by", kind: "text", minWidth: 150,
+    raw: (c) => c.updatedBy,
+    render: (c) => c.updatedBy || "—",
   },
 ];
 
