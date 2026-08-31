@@ -41,6 +41,10 @@ export const Icon = {
   briefcase: (p: any) => (<svg {...S(p)}><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18"/></svg>),
   cloud: (p: any) => (<svg {...S(p)}><path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.3A3.5 3.5 0 0 1 18 18z"/></svg>),
   lock: (p: any) => (<svg {...S(p)}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>),
+  // padlock, closed shackle = separator position locked
+  splitLock: (p: any) => (<svg {...S(p)}><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>),
+  // padlock, open shackle = separator draggable / unlocked
+  splitUnlock: (p: any) => (<svg {...S(p)}><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.6-1.7"/></svg>),
   clipboard: (p: any) => (<svg {...S(p)}><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg>),
   cart: (p: any) => (<svg {...S(p)}><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M3 4h2l2.4 12h10L20 8H6"/></svg>),
   user: (p: any) => (<svg {...S(p)}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>),
@@ -64,6 +68,8 @@ export const Icon = {
   arrowDown: (p: any) => (<svg {...S(p)}><path d="M12 5v14M5 12l7 7 7-7"/></svg>),
   halfWidth: (p: any) => (<svg {...S(p)}><rect x="3" y="6" width="9" height="12" rx="2"/><rect x="15" y="6" width="6" height="12" rx="2" opacity="0.3"/></svg>),
   fullWidth: (p: any) => (<svg {...S(p)}><rect x="3" y="6" width="18" height="12" rx="2"/></svg>),
+  bot: (p: any) => (<svg {...S(p)}><rect x="4" y="9" width="16" height="11" rx="3"/><path d="M12 9V5"/><circle cx="12" cy="4" r="1"/><circle cx="9" cy="14" r="0.5" fill="currentColor"/><circle cx="15" cy="14" r="0.5" fill="currentColor"/><path d="M2 13v3M22 13v3"/></svg>),
+  shieldX: (p: any) => (<svg {...S(p)}><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/></svg>),
 };
 
 export type IconName = keyof typeof Icon;

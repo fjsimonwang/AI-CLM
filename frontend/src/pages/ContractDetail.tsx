@@ -67,6 +67,20 @@ export default function ContractDetail() {
 
   const relations = useQuery({ queryKey: ["relations", id], queryFn: () => api(`/contracts/${id}/relations`) });
   const risks = useQuery({ queryKey: ["risks", id], queryFn: () => api(`/contracts/${id}/risks`), enabled: !!id });
+  const agentStatus = useQuery({
+    queryKey: ["agent-status", id],
+    queryFn: () => api(`/agent-channel/contracts/${id}/status`),
+    enabled: !!id,
+  });
+  const setAgentCollab = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api(`/contracts/${id}/agent-collab`, { method: "POST", json: { enabled } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["agent-status", id] });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+    },
+  });
   const attachmentsQuery = useQuery({
     queryKey: ["contract-attachments", id],
     queryFn: () => api(`/contracts/${id}/attachments`),
@@ -116,6 +130,17 @@ export default function ContractDetail() {
   const setStatus = useMutation({
     mutationFn: (status: string) => api(`/contracts/${id}/status`, { method: "PATCH", json: { status } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["contract", id] }),
+  });
+  const actOnTask = useMutation({
+    mutationFn: (p: { taskId: string; event: string }) =>
+      api(`/workflow/tasks/${p.taskId}/act`, { method: "POST", json: { event: p.event } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wf", id] });
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+      qc.invalidateQueries({ queryKey: ["me-summary"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   // mandatory AI quick check before the requestor can submit a draft for approval.
@@ -309,15 +334,40 @@ export default function ContractDetail() {
             )}
           </div>
         </div>
-        {(canEdit || isRequestor) && (
-          <div className="flex gap-2 shrink-0">
+        {isRequestor && (
+          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
             {d.status === "DRAFT" && (
               <button className="btn btn-primary" disabled={checking || startWf.isPending} onClick={beginSubmit}>
                 Submit for approval
               </button>
             )}
-            {d.status === "IN_REVIEW" && canEdit && (
-              <button className="btn" onClick={() => setStatus.mutate("DRAFT")}>Recall to draft</button>
+            {d.status === "IN_REVIEW" && (
+              <button className="btn" disabled={setStatus.isPending} onClick={() => setStatus.mutate("DRAFT")}>
+                Recall to draft
+              </button>
+            )}
+          </div>
+        )}
+        {activeTask && user?.id && activeTask.assignedUserId === user.id && (
+          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+            {wfData.availableEvents?.includes("approve") && (
+              <button
+                className="btn btn-primary"
+                disabled={actOnTask.isPending}
+                onClick={() => actOnTask.mutate({ taskId: activeTask.id, event: "approve" })}
+              >
+                Approve
+              </button>
+            )}
+            {wfData.availableEvents?.includes("reject") && (
+              <button
+                className="btn"
+                style={{ borderColor: "var(--risk)", color: "var(--risk)" }}
+                disabled={actOnTask.isPending}
+                onClick={() => actOnTask.mutate({ taskId: activeTask.id, event: "reject" })}
+              >
+                Reject
+              </button>
             )}
           </div>
         )}
@@ -375,7 +425,43 @@ export default function ContractDetail() {
           { key: "overview", label: "Overview" },
           { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
           { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
-          { key: "discussion", label: "Discussion", count: d.discussionCount ?? 0 },
+          {
+            key: "discussion",
+            label: "Discussion",
+            count: d.discussionCount ?? 0,
+            icon: (
+              <Icon.bot
+                width={14}
+                height={14}
+                className="inline align-[-2px] mr-1"
+                style={{ color: d.agentCollabEnabled ? "#7c3aed" : "currentColor" }}
+              />
+            ),
+            extra:
+              agentStatus.data?.canToggleContract ? (
+                <span
+                  role="switch"
+                  aria-checked={!!d.agentCollabEnabled}
+                  aria-label="Agent collaboration for this contract"
+                  title={
+                    d.agentCollabEnabled
+                      ? "Agent collaboration is ON — agents may contribute to discussions on this contract"
+                      : "Allow agents to discuss and answer questions in this contract's threads"
+                  }
+                  className="relative inline-flex w-8 h-[18px] rounded-full align-middle ml-2 cursor-pointer transition-colors"
+                  style={{ background: d.agentCollabEnabled ? "#7c3aed" : "var(--ink-faint)" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!setAgentCollab.isPending) setAgentCollab.mutate(!d.agentCollabEnabled);
+                  }}
+                >
+                  <span
+                    className="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow"
+                    style={{ transition: "transform 0.2s", transform: d.agentCollabEnabled ? "translateX(14px)" : "none" }}
+                  />
+                </span>
+              ) : null,
+          },
           { key: "workflow", label: "Workflow" },
           { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
           { key: "relations", label: "Relations", count:
@@ -555,7 +641,7 @@ export default function ContractDetail() {
 
       {tab === "discussion" && (
         <div className="fade-in">
-          <CommentThreads entityType="CONTRACT" entityId={id!} />
+          <CommentThreads entityType="CONTRACT" entityId={id!} agentEnabled={!!agentStatus.data?.active} />
         </div>
       )}
 

@@ -112,6 +112,7 @@ public final class Repos {
     public interface AuditEvents extends JpaRepository<AuditEvent, UUID> {
         List<AuditEvent> findByEntityTypeAndEntityIdOrderByOccurredAtDesc(String type, String id);
         List<AuditEvent> findTop100ByOrderByOccurredAtDesc();
+        List<AuditEvent> findTop200ByEntityTypeAndActionOrderByOccurredAtDesc(String entityType, String action);
     }
 
     public interface IntakeSessions extends JpaRepository<IntakeSession, UUID> {
@@ -204,6 +205,15 @@ public final class Repos {
         List<ContractRisk> findByContractIdOrderByCreatedAtDesc(UUID contractId);
         List<ContractRisk> findByContractIdAndStatus(UUID contractId, String status);
     }
+
+    public interface AutoRejectRules extends JpaRepository<AutoRejectRule, UUID> {
+        List<AutoRejectRule> findByOwnerUserIdOrderByCreatedAtDesc(UUID ownerUserId);
+        List<AutoRejectRule> findByOwnerUserIdAndEnabledTrue(UUID ownerUserId);
+        List<AutoRejectRule> findAllByOrderByCreatedAtDesc();
+    }
+
+    /** Keyed by owner user id — one global trigger-timing setting per approver. */
+    public interface AutoRejectSettings extends JpaRepository<AutoRejectSetting, UUID> {}
 
     public interface UserSettings extends JpaRepository<UserSetting, UserSetting.Key> {}
 

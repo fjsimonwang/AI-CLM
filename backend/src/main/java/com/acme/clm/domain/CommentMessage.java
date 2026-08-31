@@ -13,8 +13,14 @@ public class CommentMessage {
     public UUID id;
     @Column(name = "thread_id", nullable = false)
     public UUID threadId;
-    @Column(name = "author_user_id", nullable = false)
+    @Column(name = "author_user_id")
     public UUID authorUserId;
+    @Column(name = "channel", nullable = false)
+    public String channel = "HUMAN";
+    @Column(name = "author_agent")
+    public String authorAgent;
+    @Column(name = "represented_user_id")
+    public UUID representedUserId;
     @Column(name = "body_html", nullable = false, columnDefinition = "text")
     public String bodyHtml;
     @Column(name = "body_format")

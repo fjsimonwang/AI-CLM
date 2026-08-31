@@ -13,6 +13,7 @@ import com.acme.clm.domain.Contract;
 import com.acme.clm.repo.Repos;
 import com.acme.clm.service.AiInsightService;
 import com.acme.clm.service.AuditService;
+import com.acme.clm.service.AccessService;
 import com.acme.clm.service.BriefingService;
 import com.acme.clm.service.ReviewService;
 import java.time.Instant;
@@ -38,12 +39,14 @@ public class AiController {
     private final BriefingService briefings;
     private final ReviewService review;
     private final AiInsightService insightService;
+    private final AccessService access;
 
     public AiController(Repos.AiInteractions interactions, Repos.Contracts contracts, Repos.ClauseVariants clauseVariants,
                         Repos.ClauseConcepts clauseConcepts, AiService ai, AiInteractionLog aiLog,
                         AuditService audit, CurrentUser current, Repos.PrecedentLinks precedents,
                         Repos.AiReviewRules reviewRules,
-                        BriefingService briefings, ReviewService review, AiInsightService insightService) {
+                        BriefingService briefings, ReviewService review, AiInsightService insightService,
+                        AccessService access) {
         this.interactions = interactions;
         this.contracts = contracts;
         this.clauseVariants = clauseVariants;
@@ -57,19 +60,36 @@ public class AiController {
         this.briefings = briefings;
         this.review = review;
         this.insightService = insightService;
+        this.access = access;
     }
 
     @GetMapping("/status")
     public Map<String, Object> status() {
-        return Map.of("modelLive", ai.modelIsLive(), "modelId", ai.modelId());
+        return Map.of("modelLive", ai.modelIsLive());
+    }
+
+    /** Interaction payloads quote contract content (questions, AI replies) — same visibility as the contract. */
+    private boolean interactionVisible(UUID cid) {
+        if (cid == null) return true;
+        return contracts.findById(cid)
+                .map(c -> access.canView(current.id(), c))
+                .orElse(false);
     }
 
     @GetMapping("/interactions")
     public List<Map<String, Object>> recent(@RequestParam(required = false) UUID contractId) {
+        if (contractId != null) {
+            Contract c = contracts.findById(contractId)
+                    .orElseThrow(() -> new ApiExceptions.NotFoundException("Contract not found"));
+            if (!access.canView(current.id(), c))
+                throw new ApiExceptions.NotFoundException("Contract not found");
+        }
         List<AiInteraction> list = contractId == null
                 ? interactions.findTop200ByOrderByOccurredAtDesc()
                 : interactions.findByContractIdOrderByOccurredAtDesc(contractId);
-        return list.stream().map(this::map).toList();
+        return list.stream()
+                .filter(i -> interactionVisible(i.contractId))
+                .map(this::map).toList();
     }
 
     @PostMapping("/interactions/{id}/outcome")
@@ -87,7 +107,7 @@ public class AiController {
         interactions.save(ai);
         audit.recordAi(ai.contractId == null ? "AI_INTERACTION" : "CONTRACT",
                 ai.contractId == null ? id.toString() : ai.contractId.toString(),
-                "AI_CHANGE_REVERTED", current.id(), ai.modelId, ai.inputHash);
+                "AI_CHANGE_REVERTED", current.id(), null, ai.inputHash);
         return map(ai);
     }
 
@@ -277,7 +297,6 @@ public class AiController {
         m.put("id", a.id);
         m.put("surface", a.surface);
         m.put("capability", a.capability);
-        m.put("modelId", a.modelId);
         m.put("promptId", a.promptId);
         m.put("promptVersion", a.promptVersion);
         m.put("confidence", a.confidenceScore);

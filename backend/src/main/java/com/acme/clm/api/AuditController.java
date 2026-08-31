@@ -39,7 +39,6 @@ public class AuditController {
         m.put("actor", e.actorUserId == null ? (e.actorType == null ? "system" : e.actorType.toLowerCase())
                 : users.findById(e.actorUserId).map(u -> u.displayName).orElse("unknown"));
         m.put("occurredAt", e.occurredAt);
-        m.put("aiModelId", e.aiModelId);
         m.put("before", e.beforeState == null ? null : Json.read(e.beforeState));
         m.put("after", e.afterState == null ? null : Json.read(e.afterState));
         return m;

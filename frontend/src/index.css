@@ -126,6 +126,7 @@ body {
   background: var(--surface-2);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-sm { padding: 0.28rem 0.6rem; font-size: 0.78rem; }
 .btn-primary {
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 86%, #fff) 0%, var(--accent) 55%, color-mix(in srgb, var(--accent) 88%, #000) 100%);
   border-color: color-mix(in srgb, var(--accent) 80%, #000);

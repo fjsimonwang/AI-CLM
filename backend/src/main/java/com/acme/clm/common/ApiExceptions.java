@@ -25,4 +25,9 @@ public final class ApiExceptions {
     public static class ForbiddenException extends RuntimeException {
         public ForbiddenException(String message) { super(message); }
     }
+
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public static class ServiceUnavailableException extends RuntimeException {
+        public ServiceUnavailableException(String message) { super(message); }
+    }
 }

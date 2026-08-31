@@ -8,6 +8,7 @@ import ContractDetail from "./pages/ContractDetail";
 import Intake from "./pages/Intake";
 import IntakeSessionView from "./pages/IntakeSessionView";
 import Approvals from "./pages/Approvals";
+import AutoReject from "./pages/AutoReject";
 import Obligations from "./pages/Obligations";
 import Clauses from "./pages/Clauses";
 import Templates from "./pages/Templates";
@@ -46,6 +47,7 @@ export default function App() {
       <Route path="/contracts/:id" element={<Protected perm="VIEW_CONTRACTS"><ContractDetail /></Protected>} />
       <Route path="/inquiry" element={<Navigate to="/contracts" replace />} />
       <Route path="/approvals" element={<Protected perm="APPROVE"><Approvals /></Protected>} />
+      <Route path="/auto-reject" element={<Protected perm="APPROVE"><AutoReject /></Protected>} />
       <Route path="/obligations" element={<Protected perm="VIEW_OBLIGATIONS"><Obligations /></Protected>} />
       <Route path="/clauses" element={<Protected perm="VIEW_CLAUSES"><Clauses /></Protected>} />
       <Route path="/templates" element={<Protected perm="VIEW_TEMPLATES"><Templates /></Protected>} />

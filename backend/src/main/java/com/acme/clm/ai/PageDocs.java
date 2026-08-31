@@ -147,6 +147,28 @@ public final class PageDocs {
             summary, "What changed" vs the precedent/playbook, "Deviations from standard", "Decision
             requested".
             """);
+        add("/auto-reject", """
+            AUTO-REJECTION (/auto-reject) — the approver's automatic-rejection rule builder; needs
+            the APPROVE permission. An explainer card ("How auto-rejection works") summarises the
+            mechanics: a rule rejects a contract automatically when it reaches YOUR approval step
+            with the rule's requirements unmet. "New rule" opens a create form (name; scope
+            sections — "Applies to contract types", "Applies in countries", "Applies to our
+            contracting entities" as toggle chips, empty meaning no restriction; and "Describe the
+            conditions in your own words" free-text area). Saving does NOT execute yet: press
+            "Structure with AI" — the AI restates the rule as a regulated summary plus a numbered
+            list of executable requirements (attachment/field/text checks) with an ANY_OF/ALL_OF
+            combinator badge; without a structured interpretation the rule stays "needs
+            structuring" and never rejects. Each rule card: enabled toggle, scope chips, the
+            instructions, the interpretation (summary + requirements), "fired N times", Edit/
+            Delete, "Re-interpret" (when instructions changed), and "Dry-run" — pick one of your
+            open approval tasks and see met/unmet requirements with a "Would reject" verdict.
+            "Recent auto-rejections" lists the fired events (contract, rule, reason, when). Rules
+            belong to the approver who created them; admins/legal counsel with global access see all.
+            The "When should auto-rejection kick in?" card sets ONE global trigger timing for all
+            your rules: reject as soon as the request reaches your queue, or wait N hours before
+            auto-rejection starts to evaluate (applies only to requests that arrive after the
+            setting is changed; delayed rules are checked at most every 5 minutes).
+            """);
         add("/obligations", """
             OBLIGATIONS (/obligations) — track contractual obligations and deadlines extracted from
             contracts; needs VIEW_OBLIGATIONS.

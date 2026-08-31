@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { money, date } from "../api";
 import { Badge, Card, statusTone, riskTone, Empty } from "./ui";
@@ -175,7 +175,23 @@ export function ContractTable({ rows }: { rows: any[] }) {
   const [view, setView] = useState<View>(loadView);
   const [filters, setFilters] = useState<Record<string, Filter>>({});
   const [sort, setSort] = useState<Sort>(null);
-  const [menu, setMenu] = useState<{ key: string; mode: "filter" | "filter-mgr" } | null>(null);
+  const [menu, setMenu] = useState<{ key: string; mode: "filter" | "filter-mgr"; anchor: { left: number; bottom: number } } | null>(null);
+
+  // Popovers are rendered position:fixed (anchored to the opening button's screen rect) so
+  // they can't be clipped by the table's horizontal scroll container. Any scroll/resize
+  // invalidates the anchor, so close rather than show a stale menu.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => { window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
+  }, [menu]);
+
+  function anchorOf(e: React.MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    return { left: r.left, bottom: r.bottom };
+  }
 
   const byKey = useMemo(() => Object.fromEntries(COLUMNS.map((d) => [d.key, d])), []);
   const visible = view.order.map((k) => byKey[k]).filter((d) => d && !view.hidden.includes(d.key));
@@ -252,14 +268,20 @@ export function ContractTable({ rows }: { rows: any[] }) {
           <button
             className="btn inline-flex items-center gap-1"
             style={{ padding: "0.25rem 0.5rem" }}
-            onClick={() => setMenu((m) => (m?.mode === "filter-mgr" ? null : { key: "", mode: "filter-mgr" }))}
+            onClick={(e) => setMenu((m) => (m?.mode === "filter-mgr" ? null : { key: "", mode: "filter-mgr", anchor: anchorOf(e) }))}
           >
             <Icon.list width={13} height={13} /> Columns ({visible.length})
           </button>
           {menu?.mode === "filter-mgr" && (
             <>
               <div className="fixed inset-0 z-20" onClick={closeMenu} />
-              <div className="absolute right-0 top-full mt-1 z-30 w-64 card !p-1 shadow-lg">
+              <div
+                className="fixed z-30 w-64 card !p-1 shadow-lg"
+                style={{
+                  top: menu.anchor.bottom + 6,
+                  left: Math.max(8, Math.min(menu.anchor.left, window.innerWidth - 272)),
+                }}
+              >
                 <div className="px-2 py-1.5 text-[11px] uppercase tracking-wide text-ink-faint">Show / order columns</div>
                 {view.order.map((key, i) => {
                   const def = byKey[key];
@@ -310,7 +332,10 @@ export function ContractTable({ rows }: { rows: any[] }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Vertical scrolling happens inside the card (max-height) so the horizontal
+          scrollbar stays at the bottom of the view instead of below the last row,
+          and the header stays visible while scrolling. */}
+      <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 300px)", borderRadius: "0 0 12px 12px" }}>
         <table className="w-full text-sm" style={{ minWidth }}>
           <thead>
             <tr className="text-left text-xs text-ink-faint border-b border-border">
@@ -321,13 +346,13 @@ export function ContractTable({ rows }: { rows: any[] }) {
                 return (
                   <th
                     key={def.key}
-                    className={`px-3 py-2 font-medium align-bottom ${def.align === "right" ? "text-right" : ""}`}
-                    style={{ minWidth: def.minWidth }}
+                    className={`sticky top-0 z-10 px-3 py-2 font-medium align-bottom ${def.align === "right" ? "text-right" : ""}`}
+                    style={{ minWidth: def.minWidth, background: "var(--surface)", boxShadow: "inset 0 -1px 0 var(--border)" }}
                   >
-                    <div className={`flex items-center gap-0.5 ${def.align === "right" ? "justify-end" : ""}`}>
+                    <div className={`relative flex items-center gap-0.5 ${def.align === "right" ? "justify-end" : ""}`}>
                       <button
                         className="inline-flex items-center gap-1 hover:text-ink transition-colors"
-                        onClick={() => setMenu((m) => (m?.key === def.key && m.mode === "filter" ? null : { key: def.key, mode: "filter" }))}
+                        onClick={(e) => setMenu((m) => (m?.key === def.key && m.mode === "filter" ? null : { key: def.key, mode: "filter", anchor: anchorOf(e) }))}
                         title="Filter this column"
                       >
                         {def.label}
@@ -348,32 +373,36 @@ export function ContractTable({ rows }: { rows: any[] }) {
                           </span>
                         )}
                       </button>
-                    </div>
 
-                    {menu?.key === def.key && menu.mode === "filter" && (
-                      <>
-                        <div className="fixed inset-0 z-20" onClick={closeMenu} />
-                        <div
-                          className={`absolute ${def.align === "right" ? "right-2" : "left-2"} top-full z-30 w-56 card !p-3 space-y-2 shadow-lg`}
-                        >
-                          <div className="text-[11px] uppercase tracking-wide text-ink-faint">
-                            Filter · {def.label}
+                      {menu?.key === def.key && menu.mode === "filter" && (
+                        <>
+                          <div className="fixed inset-0 z-20" onClick={closeMenu} />
+                          <div
+                            className="fixed z-30 w-56 card !p-3 space-y-2 shadow-lg"
+                            style={{
+                              top: menu.anchor.bottom + 6,
+                              left: Math.max(8, Math.min(menu.anchor.left, window.innerWidth - 232)),
+                            }}
+                          >
+                            <div className="text-[11px] uppercase tracking-wide text-ink-faint">
+                              Filter · {def.label}
+                            </div>
+                            {filterInput(
+                              def,
+                              col || { op: "is", value: "" },
+                              (op) => setColFilter(def.key, { op }),
+                              (value) => setColFilter(def.key, { value }),
+                            )}
+                            <div className="flex justify-between pt-1">
+                              <button className="link text-xs" onClick={() => clearColFilter(def.key)}>Clear</button>
+                              <button className="btn btn-primary text-xs" style={{ padding: "0.25rem 0.6rem" }} onClick={closeMenu}>
+                                Done
+                              </button>
+                            </div>
                           </div>
-                          {filterInput(
-                            def,
-                            col || { op: "is", value: "" },
-                            (op) => setColFilter(def.key, { op }),
-                            (value) => setColFilter(def.key, { value }),
-                          )}
-                          <div className="flex justify-between pt-1">
-                            <button className="link text-xs" onClick={() => clearColFilter(def.key)}>Clear</button>
-                            <button className="btn btn-primary text-xs" style={{ padding: "0.25rem 0.6rem" }} onClick={closeMenu}>
-                              Done
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </th>
                 );
               })}

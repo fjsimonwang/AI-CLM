@@ -3,19 +3,22 @@
   "configurations": [
     {
       "name": "clm-app",
-      "url": "http://localhost:3000",
-      "port": 3000
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend", "--", "--port", "63736"],
+      "port": 63736
     },
     {
-      "name": "vite",
+      "name": "clm-vite",
       "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "frontend",
-        "run",
-        "dev"
-      ],
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend", "--", "--port", "5199"],
       "port": 5199,
+      "autoPort": true
+    },
+    {
+      "name": "clm-vite-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
+      "port": 5173,
       "autoPort": true
     }
   ]

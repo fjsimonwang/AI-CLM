@@ -142,7 +142,7 @@ export function Tabs({
   active,
   onChange,
 }: {
-  tabs: { key: string; label: string; count?: number }[];
+  tabs: { key: string; label: string; count?: number; extra?: React.ReactNode; icon?: React.ReactNode }[];
   active: string;
   onChange: (k: string) => void;
 }) {
@@ -158,8 +158,10 @@ export function Tabs({
               : "border-transparent text-ink-faint hover:text-ink-soft"
           }`}
         >
+          {t.icon}
           {t.label}
           {t.count != null && <span className="ml-1 text-ink-faint">({t.count})</span>}
+          {t.extra}
         </button>
       ))}
     </div>
