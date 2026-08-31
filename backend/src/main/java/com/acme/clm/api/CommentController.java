@@ -87,19 +87,18 @@ public class CommentController {
         addMessage(t.id, req.bodyHtml());
         audit.record(t.entityType, t.entityId, "COMMENT_THREAD_OPENED", current.id(), null,
                 Map.of("title", t.title));
-        // opening a thread IS the question: with the contract's agent switch on, the best-placed
-        // participants' agents answer inline without an explicit "✦ Ask agent"
+        // opening a thread IS the question: when the opener has Agent talk on, the best-placed
+        // other participants' agents answer inline without an explicit "✦ Ask agent"
+        // (autoAnswerNewThread re-checks the opt-in and bails if it is off)
         if ("CONTRACT".equals(t.entityType)) {
             try {
                 Contract c = visibleContract(t.entityId);
-                if (c.agentCollabEnabled) {
-                    StringBuilder qb = new StringBuilder();
-                    if (t.title != null && !"Comment".equals(t.title)) qb.append(t.title).append("\n");
-                    qb.append(sanitizer.plainText(req.bodyHtml()));
-                    String question = qb.toString();
-                    if (question.length() > 2000) question = question.substring(0, 2000);
-                    agentChannel.getObject().autoAnswerNewThread(c, t, current.id(), question);
-                }
+                StringBuilder qb = new StringBuilder();
+                if (t.title != null && !"Comment".equals(t.title)) qb.append(t.title).append("\n");
+                qb.append(sanitizer.plainText(req.bodyHtml()));
+                String question = qb.toString();
+                if (question.length() > 2000) question = question.substring(0, 2000);
+                agentChannel.getObject().autoAnswerNewThread(c, t, current.id(), question);
             } catch (Exception e) {
                 // agent answers are opportunistic; the thread itself must always post
             }

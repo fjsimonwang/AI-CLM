@@ -59,6 +59,7 @@ export default function ContractDetail() {
   const initialTab = new URLSearchParams(location.search).get("tab");
   const [tab, setTab] = useState(initialTab && validTabs.includes(initialTab) ? initialTab : "overview");
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
+  const [lifecycle, setLifecycle] = useState<null | "cancel" | "close">(null);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
@@ -76,20 +77,6 @@ export default function ContractDetail() {
 
   const relations = useQuery({ queryKey: ["relations", id], queryFn: () => api(`/contracts/${id}/relations`) });
   const risks = useQuery({ queryKey: ["risks", id], queryFn: () => api(`/contracts/${id}/risks`), enabled: !!id });
-  const agentStatus = useQuery({
-    queryKey: ["agent-status", id],
-    queryFn: () => api(`/agent-channel/contracts/${id}/status`),
-    enabled: !!id,
-  });
-  const setAgentCollab = useMutation({
-    mutationFn: (enabled: boolean) =>
-      api(`/contracts/${id}/agent-collab`, { method: "POST", json: { enabled } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["contract", id] });
-      qc.invalidateQueries({ queryKey: ["agent-status", id] });
-      qc.invalidateQueries({ queryKey: ["contracts"] });
-    },
-  });
   const attachmentsQuery = useQuery({
     queryKey: ["contract-attachments", id],
     queryFn: () => api(`/contracts/${id}/attachments`),
@@ -138,7 +125,12 @@ export default function ContractDetail() {
   });
   const setStatus = useMutation({
     mutationFn: (status: string) => api(`/contracts/${id}/status`, { method: "PATCH", json: { status } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["contract", id] }),
+    onSuccess: () => {
+      setLifecycle(null);
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+      qc.invalidateQueries({ queryKey: ["me-summary"] });
+    },
   });
   const actOnTask = useMutation({
     mutationFn: (p: { taskId: string; event: string; comment?: string }) =>
@@ -231,6 +223,38 @@ export default function ContractDetail() {
           onCancel={() => setDecision(null)}
           onConfirm={(note) => actOnTask.mutate({ taskId: activeTask.id, event: decision, comment: note })}
         />
+      )}
+      {lifecycle && (
+        <div
+          className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(3px)" }}
+          onClick={() => setLifecycle(null)}
+        >
+          <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-medium">
+              {lifecycle === "close" ? "Close" : "Cancel"} <b>{d.contractNumber}</b>?
+            </h2>
+            <p className="text-sm text-ink-soft mt-2 leading-relaxed">
+              {lifecycle === "close"
+                ? "This closes the rejected request for good. It stays on record as closed but no longer needs action and can't be resubmitted."
+                : "This abandons the draft request. It stays on record as cancelled and can't be resubmitted."}
+            </p>
+            {(setStatus.error as any)?.message && (
+              <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{(setStatus.error as any).message}</div>
+            )}
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn" onClick={() => setLifecycle(null)}>Go back</button>
+              <button
+                className="btn btn-primary"
+                style={{ background: "var(--risk)", borderColor: "var(--risk)" }}
+                disabled={setStatus.isPending}
+                onClick={() => setStatus.mutate(lifecycle === "close" ? "CLOSED_REJECTED" : "CANCELLED")}
+              >
+                {setStatus.isPending ? "Working…" : lifecycle === "close" ? "Close request" : "Cancel request"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {justSubmitted && (
         <div
@@ -358,7 +382,26 @@ export default function ContractDetail() {
           <div className="flex gap-2 shrink-0 flex-wrap justify-end">
             {d.status === "DRAFT" && (
               <button className="btn btn-primary" disabled={checking || startWf.isPending} onClick={beginSubmit}>
-                Submit for approval
+                {d.rejectionReason ? "Revise & resubmit" : "Submit for approval"}
+              </button>
+            )}
+            {d.status === "DRAFT" && d.rejectionReason && (
+              <button
+                className="btn"
+                style={{ borderColor: "var(--risk)", color: "var(--risk)" }}
+                disabled={setStatus.isPending}
+                onClick={() => { setStatus.reset(); setLifecycle("close"); }}
+              >
+                Close request
+              </button>
+            )}
+            {d.status === "DRAFT" && !d.rejectionReason && (
+              <button
+                className="btn"
+                disabled={setStatus.isPending}
+                onClick={() => { setStatus.reset(); setLifecycle("cancel"); }}
+              >
+                Cancel request
               </button>
             )}
             {d.status === "IN_REVIEW" && (
@@ -392,6 +435,21 @@ export default function ContractDetail() {
           </div>
         )}
       </div>
+
+      {d.status === "DRAFT" && d.rejectionReason && (
+        <div
+          className="rounded-lg border p-3 text-sm"
+          style={{ borderColor: "var(--risk)", background: "color-mix(in srgb, var(--risk) 8%, transparent)" }}
+        >
+          <div className="font-medium" style={{ color: "var(--risk)" }}>This request was rejected and returned to you</div>
+          <div className="text-ink-soft mt-1">{d.rejectionReason}</div>
+          {isRequestor && (
+            <div className="text-xs text-ink-faint mt-1.5">
+              Edit the contract and use “Revise &amp; resubmit”, or “Close request” to close it out. Full history is in the Workflow tab.
+            </div>
+          )}
+        </div>
+      )}
 
       <Card className="!p-0 overflow-hidden">
         <button
@@ -445,43 +503,7 @@ export default function ContractDetail() {
           { key: "overview", label: "Overview" },
           { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
           { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
-          {
-            key: "discussion",
-            label: "Discussion",
-            count: d.discussionCount ?? 0,
-            icon: (
-              <Icon.bot
-                width={14}
-                height={14}
-                className="inline align-[-2px] mr-1"
-                style={{ color: d.agentCollabEnabled ? "#7c3aed" : "currentColor" }}
-              />
-            ),
-            extra:
-              agentStatus.data?.canToggleContract ? (
-                <span
-                  role="switch"
-                  aria-checked={!!d.agentCollabEnabled}
-                  aria-label="Agent collaboration for this contract"
-                  title={
-                    d.agentCollabEnabled
-                      ? "Agent collaboration is ON — agents may contribute to discussions on this contract"
-                      : "Allow agents to discuss and answer questions in this contract's threads"
-                  }
-                  className="relative inline-flex w-8 h-[18px] rounded-full align-middle ml-2 cursor-pointer transition-colors"
-                  style={{ background: d.agentCollabEnabled ? "#7c3aed" : "var(--ink-faint)" }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!setAgentCollab.isPending) setAgentCollab.mutate(!d.agentCollabEnabled);
-                  }}
-                >
-                  <span
-                    className="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow"
-                    style={{ transition: "transform 0.2s", transform: d.agentCollabEnabled ? "translateX(14px)" : "none" }}
-                  />
-                </span>
-              ) : null,
-          },
+          { key: "discussion", label: "Discussion", count: d.discussionCount ?? 0 },
           { key: "workflow", label: "Workflow" },
           { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
           { key: "relations", label: "Relations", count:
@@ -661,7 +683,7 @@ export default function ContractDetail() {
 
       {tab === "discussion" && (
         <div className="fade-in">
-          <CommentThreads entityType="CONTRACT" entityId={id!} agentEnabled={!!agentStatus.data?.active} />
+          <CommentThreads entityType="CONTRACT" entityId={id!} />
         </div>
       )}
 
@@ -716,7 +738,8 @@ export default function ContractDetail() {
               </div>
               <p className="text-xs text-ink-faint">
                 Approve or reject from the header actions above (or the Approvals screen). A rejection
-                reason is required and is kept here on the workflow record.
+                needs a reason; it returns the request to the requestor as a draft to revise and
+                resubmit, and the reason is kept here on the workflow record.
               </p>
             </div>
           )}

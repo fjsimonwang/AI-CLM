@@ -170,9 +170,11 @@ export default function Dashboard() {
       </Card>
     ),
     "tasks": () => {
-      const rejected = (mine.myRejected || []) as any[];
+      const drafts = (mine.myDrafts || []) as any[];
+      const rejected = drafts.filter((c) => c.rejectionReason);
+      const freshDrafts = drafts.filter((c) => !c.rejectionReason);
       const openTasks = (mine.openTasks || []) as any[];
-      const nothing = openTasks.length === 0 && rejected.length === 0;
+      const nothing = openTasks.length === 0 && drafts.length === 0;
       return (
         <Card>
           <SectionTitle
@@ -189,15 +191,25 @@ export default function Dashboard() {
               {rejected.map((c: any) => (
                 <div key={c.id} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <Link to={`/contracts/${c.id}?tab=workflow`} className="link text-sm font-medium">
+                    <Link to={`/contracts/${c.id}`} className="link text-sm font-medium">
                       {c.contractNumber}
                     </Link>
                     <span className="text-sm text-ink-soft"> · {c.title}</span>
-                    <div className="text-xs text-ink-faint">
-                      <Badge tone="risk">rejected</Badge> review the reason and revise
+                    <div className="text-xs text-ink-faint truncate">
+                      <Badge tone="risk">rejected</Badge> {c.rejectionReason}
                     </div>
                   </div>
-                  <Link to={`/contracts/${c.id}?tab=workflow`} className="btn">Review</Link>
+                  <Link to={`/contracts/${c.id}`} className="btn">Review</Link>
+                </div>
+              ))}
+              {freshDrafts.map((c: any) => (
+                <div key={c.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link to={`/contracts/${c.id}`} className="link text-sm font-medium">{c.contractNumber}</Link>
+                    <span className="text-sm text-ink-soft"> · {c.title}</span>
+                    <div className="text-xs text-ink-faint">Draft — review &amp; submit for approval</div>
+                  </div>
+                  <Link to={`/contracts/${c.id}`} className="btn">Open</Link>
                 </div>
               ))}
               {openTasks.map((t: any) => (
@@ -386,7 +398,7 @@ function EditShell({ label, size, onSize, children, onHide, onDelete }: {
 function AttentionCard({ mine, editing, isApprover }: { mine: any; editing: boolean; isApprover: boolean }) {
   const attention =
     (mine.openTasks || []).length + (mine.discussionsAwaiting || 0) + (mine.accessToDecide || []).length
-    + (mine.myDrafts || []).length + (mine.myRejected || []).length;
+    + (mine.myDrafts || []).length;
   if (attention === 0 && !editing) return null;
   return (
     <Card className="border-[color:var(--accent)]">
@@ -397,14 +409,17 @@ function AttentionCard({ mine, editing, isApprover }: { mine: any; editing: bool
         <div className="grid sm:grid-cols-2 gap-2">
           {(mine.myDrafts || []).map((c: any) => (
             <Link key={c.id} to={`/contracts/${c.id}`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
-              <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}><Icon.file width={16} height={16} /></span>
-              <div className="min-w-0"><div className="text-sm font-medium truncate">{c.contractNumber}</div><div className="text-xs text-ink-faint">Draft — review & submit for approval</div></div>
-            </Link>
-          ))}
-          {(mine.myRejected || []).map((c: any) => (
-            <Link key={c.id} to={`/contracts/${c.id}?tab=workflow`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
-              <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--risk) 15%, transparent)", color: "var(--risk)" }}><Icon.x width={16} height={16} /></span>
-              <div className="min-w-0"><div className="text-sm font-medium truncate">{c.contractNumber}</div><div className="text-xs text-ink-faint">Rejected — review the reason and revise</div></div>
+              {c.rejectionReason ? (
+                <>
+                  <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--risk) 15%, transparent)", color: "var(--risk)" }}><Icon.x width={16} height={16} /></span>
+                  <div className="min-w-0"><div className="text-sm font-medium truncate">{c.contractNumber}</div><div className="text-xs text-ink-faint truncate">Rejected — {c.rejectionReason}</div></div>
+                </>
+              ) : (
+                <>
+                  <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}><Icon.file width={16} height={16} /></span>
+                  <div className="min-w-0"><div className="text-sm font-medium truncate">{c.contractNumber}</div><div className="text-xs text-ink-faint">Draft — review & submit for approval</div></div>
+                </>
+              )}
             </Link>
           ))}
           {(mine.openTasks || []).map((t: any) => (

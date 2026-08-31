@@ -232,6 +232,7 @@ public class ContractService {
         m.put("riskScore", c.riskScore);
         m.put("source", c.source);
         m.put("summary", c.summary);
+        m.put("rejectionReason", c.rejectionReason);
         m.put("updatedAt", c.updatedAt == null ? c.createdAt : c.updatedAt);
         m.put("updatedBy", userName(c.updatedBy == null ? c.createdBy : c.updatedBy));
         return m;
@@ -259,7 +260,6 @@ public class ContractService {
         m.put("paymentTermsDays", c.paymentTermsDays);
         m.put("liabilitySummary", c.liabilitySummary);
         m.put("editorDocumentId", c.editorDocumentId);
-        m.put("agentCollabEnabled", c.agentCollabEnabled);
         m.put("typeAttributes", Json.readMap(c.typeAttributes));
         m.put("owner", userName(c.ownerUserId));
         m.put("ownerUserId", c.ownerUserId);
@@ -544,14 +544,28 @@ public class ContractService {
     public Map<String, Object> updateStatus(UUID id, String status, UUID actor) {
         Contract c = contracts.findById(id).orElseThrow(() -> new ApiExceptions.NotFoundException("Contract not found"));
         String before = c.status;
-        // Recall to draft is a requestor-only action; cancel the running workflow as well.
-        if ("DRAFT".equals(status)) {
-            boolean requestor = actor != null && (actor.equals(c.ownerUserId) || actor.equals(c.createdBy));
-            if (!requestor) {
-                throw new ApiExceptions.ForbiddenException("Only the requestor can recall this contract to draft.");
+        boolean requestor = actor != null && (actor.equals(c.ownerUserId) || actor.equals(c.createdBy));
+
+        // All lifecycle actions below are the requestor's to take.
+        switch (status) {
+            case "DRAFT" -> { // recall from review
+                if (!requestor) throw new ApiExceptions.ForbiddenException("Only the requestor can recall this contract to draft.");
+                if (!"IN_REVIEW".equals(before)) throw new ApiExceptions.BadRequestException("Only a contract in review can be recalled to draft.");
+                workflow.cancelOpen(id, actor);
             }
-            if ("IN_REVIEW".equals(before)) workflow.cancelOpen(id, actor);
+            case "CANCELLED" -> { // abandon a draft that was never rejected
+                if (!requestor) throw new ApiExceptions.ForbiddenException("Only the requestor can cancel this request.");
+                if (!"DRAFT".equals(before)) throw new ApiExceptions.BadRequestException("Only a draft can be cancelled.");
+                if (c.rejectionReason != null) throw new ApiExceptions.BadRequestException("This request was rejected — close it instead of cancelling.");
+            }
+            case "CLOSED_REJECTED" -> { // close out a rejected request instead of revising it
+                if (!requestor) throw new ApiExceptions.ForbiddenException("Only the requestor can close this request.");
+                if (!"DRAFT".equals(before) || c.rejectionReason == null)
+                    throw new ApiExceptions.BadRequestException("Only a rejected request can be closed.");
+            }
+            default -> throw new ApiExceptions.BadRequestException("Unsupported status change: " + status);
         }
+
         c.status = status;
         c.updatedBy = actor;
         c.updatedAt = java.time.Instant.now();
@@ -561,24 +575,6 @@ public class ContractService {
         return get(id);
     }
 
-    /** Per-contract switch: allow counterpart agents to discuss this contract. Owner/requestor or ADMIN/GC only. */
-    @Transactional
-    public Map<String, Object> setAgentCollab(UUID id, boolean enabled, UUID actor) {
-        Contract c = contracts.findById(id).orElseThrow(() -> new ApiExceptions.NotFoundException("Contract not found"));
-        if (actor == null || !access.canView(actor, c))
-            throw new ApiExceptions.NotFoundException("Contract not found");
-        if (!(actor.equals(c.ownerUserId) || actor.equals(c.createdBy) || access.seesEverything(actor))) {
-            throw new ApiExceptions.ForbiddenException("Only the contract owner or a general counsel can change agent collaboration.");
-        }
-        boolean before = c.agentCollabEnabled;
-        c.agentCollabEnabled = enabled;
-        c.updatedBy = actor;
-        c.updatedAt = java.time.Instant.now();
-        contracts.save(c);
-        audit.record("CONTRACT", id.toString(), enabled ? "AGENT_COLLAB_ENABLED" : "AGENT_COLLAB_DISABLED",
-                actor, Map.of("enabled", before), Map.of("enabled", enabled));
-        return get(id, actor);
-    }
 
     // ---------------- Relations ----------------
 

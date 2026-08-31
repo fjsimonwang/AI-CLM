@@ -15,10 +15,9 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function CommentThreads({ entityType, entityId, agentEnabled }: {
+export function CommentThreads({ entityType, entityId }: {
   entityType: string;
   entityId: string;
-  agentEnabled?: boolean;
 }) {
   const qc = useQueryClient();
   const key = ["comments", entityType, entityId];
@@ -44,14 +43,14 @@ export function CommentThreads({ entityType, entityId, agentEnabled }: {
   const [agentKey, setAgentKey] = useState(0);
   const [foldOpen, setFoldOpen] = useState<Record<string, boolean>>({});
 
-  // when the caller doesn't pass agentEnabled, decide from the contract's live agent-channel status
+  // "✦ Ask agent" is available when the current user has Agent talk on (header toggle);
+  // /agent-channel/status.active reflects that personal opt-in.
   const statusQuery = useQuery({
     queryKey: ["agent-status", entityId],
     queryFn: () => api(`/agent-channel/contracts/${entityId}/status`) as Promise<{ active: boolean }>,
-    enabled: entityType === "CONTRACT" && agentEnabled === undefined,
+    enabled: entityType === "CONTRACT",
   });
-  const agentEnabledResolved = agentEnabled === undefined ? !!statusQuery.data?.active : agentEnabled;
-  const agentAsk = agentEnabledResolved && entityType === "CONTRACT";
+  const agentAsk = !!statusQuery.data?.active && entityType === "CONTRACT";
 
   const agentsQuery = useQuery({
     queryKey: ["agent-agents", entityId],

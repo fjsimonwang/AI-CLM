@@ -119,16 +119,18 @@ public class MeController {
             }
         }
 
-        // my drafts still to submit
+        // my drafts still to act on — includes requests an approver rejected and sent back
+        // (status DRAFT + a rejectionReason); cancelled/closed contracts never appear here.
         List<Map<String, Object>> myDrafts = contracts.findAll().stream()
-                .filter(c -> me.equals(c.ownerUserId) && "DRAFT".equals(c.status))
-                .map(c -> Map.<String, Object>of("id", c.id, "contractNumber", c.contractNumber, "title", c.title))
-                .toList();
-
-        // contracts of mine that were rejected — the requestor needs to review and revise/resubmit
-        List<Map<String, Object>> myRejected = contracts.findAll().stream()
-                .filter(c -> (me.equals(c.ownerUserId) || me.equals(c.createdBy)) && "CLOSED_REJECTED".equals(c.status))
-                .map(c -> Map.<String, Object>of("id", c.id, "contractNumber", c.contractNumber, "title", c.title))
+                .filter(c -> (me.equals(c.ownerUserId) || me.equals(c.createdBy)) && "DRAFT".equals(c.status))
+                .map(c -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", c.id);
+                    m.put("contractNumber", c.contractNumber);
+                    m.put("title", c.title);
+                    m.put("rejectionReason", c.rejectionReason);
+                    return m;
+                })
                 .toList();
 
         Map<String, Object> out = new LinkedHashMap<>();
@@ -139,9 +141,7 @@ public class MeController {
         out.put("accessToDecide", toDecide);
         out.put("accessToDecideCount", toDecide.size());
         out.put("myDrafts", myDrafts);
-        out.put("myRejected", myRejected);
-        out.put("attentionCount",
-                tasks.size() + discussionsAwaiting + toDecide.size() + myDrafts.size() + myRejected.size());
+        out.put("attentionCount", tasks.size() + discussionsAwaiting + toDecide.size() + myDrafts.size());
         return out;
     }
 

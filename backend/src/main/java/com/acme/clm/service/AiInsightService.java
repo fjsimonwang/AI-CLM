@@ -259,27 +259,17 @@ public class AiInsightService {
                     .append("\n");
         }
 
-        sb.append("\nMY DRAFTS NOT YET SUBMITTED:\n");
+        sb.append("\nMY DRAFTS TO ACT ON (revise/submit; a 'rejected' note means an approver sent it back):\n");
         long drafts = 0;
         for (UUID cid : mine) {
             Contract c = contracts.findById(cid).orElse(null);
             if (c == null || !"DRAFT".equals(c.status)) continue;
             if (!userId.equals(c.ownerUserId) && !userId.equals(c.createdBy)) continue;
-            sb.append("- ").append(c.contractNumber).append(" — ").append(c.title).append("\n");
+            sb.append("- ").append(c.contractNumber).append(" — ").append(c.title)
+                    .append(c.rejectionReason != null ? " [REJECTED: " + c.rejectionReason + "]" : "").append("\n");
             drafts++;
         }
         if (drafts == 0) sb.append("(none)\n");
-
-        sb.append("\nMY CONTRACTS REJECTED OR CLOSED-REJECTED (need my attention):\n");
-        long rej = 0;
-        for (UUID cid : mine) {
-            Contract c = contracts.findById(cid).orElse(null);
-            if (c == null || !"CLOSED_REJECTED".equals(c.status)) continue;
-            if (!userId.equals(c.ownerUserId) && !userId.equals(c.createdBy)) continue;
-            sb.append("- ").append(c.contractNumber).append(" — ").append(c.title).append("\n");
-            rej++;
-        }
-        if (rej == 0) sb.append("(none)\n");
 
         sb.append("\nDISCUSSION THREADS ON MY CONTRACTS AWAITING A REPLY (last message not mine):\n");
         int dc = 0;

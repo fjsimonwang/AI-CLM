@@ -75,6 +75,7 @@ public class WorkflowService {
         instances.save(wi);
 
         c.status = "IN_REVIEW";
+        c.rejectionReason = null; // a fresh submission clears the previous rejection
         contracts.save(c);
 
         enterState(wi, stateNode(d, initial), actor);
@@ -132,12 +133,24 @@ public class WorkflowService {
                 Map.of("to", target));
 
         Contract c = contracts.findById(wi.contractId).orElseThrow();
-        if ("end".equals(targetState.path("type").asText()) || target.startsWith("closed") || "executed".equals(target)) {
+        boolean terminal = "end".equals(targetState.path("type").asText())
+                || target.startsWith("closed") || "executed".equals(target);
+        if (terminal && target.contains("reject")) {
+            // A rejection returns the request to the requestor as a DRAFT carrying the reason.
+            // They can then revise & resubmit, or close it explicitly. The workflow instance is
+            // cancelled so a resubmission starts a fresh one.
+            cancelInstance(wi, actor);
+            c.status = "DRAFT";
+            c.rejectionReason = (comment == null || comment.isBlank()) ? "Rejected in approval." : comment;
+            contracts.save(c);
+            audit.record("CONTRACT", c.id.toString(), "REJECTED_TO_DRAFT", actor, null,
+                    Map.of("reason", c.rejectionReason));
+        } else if (terminal) {
             wi.status = "COMPLETED";
             wi.completedAt = Instant.now();
             instances.save(wi);
-            c.status = target.contains("reject") ? "CLOSED_REJECTED" : "EXECUTED";
-            if ("EXECUTED".equals(c.status)) c.effectiveDate = c.effectiveDate == null ? java.time.LocalDate.now() : c.effectiveDate;
+            c.status = "EXECUTED";
+            c.effectiveDate = c.effectiveDate == null ? java.time.LocalDate.now() : c.effectiveDate;
             contracts.save(c);
             audit.record("CONTRACT", c.id.toString(), c.status, actor, null, Map.of("via", "workflow"));
         } else {
@@ -215,11 +228,12 @@ public class WorkflowService {
         tasks.save(t);
 
         wi.currentState = rejectTarget;
-        wi.status = "COMPLETED";
-        wi.completedAt = Instant.now();
-        instances.save(wi);
+        cancelInstance(wi, null);
 
-        c.status = "CLOSED_REJECTED";
+        // Like a human rejection: the request goes back to the requestor as a DRAFT with the
+        // reason, so they can fix what the rule flagged and resubmit (or close it).
+        c.status = "DRAFT";
+        c.rejectionReason = reason.length() > 2000 ? reason.substring(0, 2000) : reason;
         contracts.save(c);
 
         audit.record("WORKFLOW_TASK", t.id.toString(), "AUTO_REJECT", null, null,
@@ -228,7 +242,7 @@ public class WorkflowService {
         audit.record("AUTO_REJECT_RULE", dec.rule().id.toString(), "FIRED", null, null,
                 Map.of("contractId", c.id.toString(), "contractNumber", c.contractNumber,
                         "state", t.stateKey, "reason", reason));
-        audit.record("CONTRACT", c.id.toString(), "CLOSED_REJECTED", null, null,
+        audit.record("CONTRACT", c.id.toString(), "REJECTED_TO_DRAFT", null, null,
                 Map.of("via", "auto_reject", "rule", dec.rule().name));
     }
 
@@ -371,15 +385,19 @@ public class WorkflowService {
     public void cancelOpen(UUID contractId, UUID actor) {
         instances.findByContractId(contractId).stream()
                 .filter(x -> "RUNNING".equals(x.status))
-                .forEach(wi -> {
-                    tasks.findByWorkflowInstanceId(wi.id).stream()
-                            .filter(t -> "OPEN".equals(t.status))
-                            .forEach(t -> { t.status = "CANCELLED"; t.completedAt = Instant.now(); tasks.save(t); });
-                    wi.status = "CANCELLED";
-                    wi.completedAt = Instant.now();
-                    instances.save(wi);
-                    audit.record("WORKFLOW", wi.id.toString(), "CANCELLED", actor, null, Map.of("contract", contractId.toString()));
-                });
+                .forEach(wi -> cancelInstance(wi, actor));
+    }
+
+    /** Mark one workflow instance and any of its open tasks CANCELLED. */
+    private void cancelInstance(WorkflowInstance wi, UUID actor) {
+        tasks.findByWorkflowInstanceId(wi.id).stream()
+                .filter(t -> "OPEN".equals(t.status))
+                .forEach(t -> { t.status = "CANCELLED"; t.completedAt = Instant.now(); tasks.save(t); });
+        wi.status = "CANCELLED";
+        wi.completedAt = Instant.now();
+        instances.save(wi);
+        audit.record("WORKFLOW", wi.id.toString(), "CANCELLED", actor, null,
+                Map.of("contract", wi.contractId.toString()));
     }
 
     private void requireRequestor(Contract c, UUID actor, String action) {
