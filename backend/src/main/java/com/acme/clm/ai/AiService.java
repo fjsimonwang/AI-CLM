@@ -701,6 +701,7 @@ public class AiService {
               from uploaded third-party paper, then submits for drafting.
             - Contracts: list and detail pages with Document, Risks, Obligations, Relations, Audit tabs.
             - Approvals: tasks for approvers, with briefings comparing the contract to its precedent/playbook.
+            - Auto-rejection: approver rules that auto-reject a contract when it reaches their approval step unmet.
             - Obligations: things that must happen during an active contract (renewals, notices).
             - Access: request/preview access to entities and decide pending requests.
             - Clause library / Template library (Knowledge section): browse precedented clause variants
@@ -721,6 +722,7 @@ public class AiService {
             buttons/sections and explain precisely what they do:
             %s
             %s
+            %s
             HIGHLIGHTS: when your guidance references a visible UI component, emit a highlight
             marker directly AFTER the component mention so the UI can outline it on screen,
             e.g. "Open Approvals [[hl:nav_approvals]] in the Work section.".
@@ -732,7 +734,7 @@ public class AiService {
             inside a bold/code span, and don't let a marker break a sentence.
 
             Answer in the same language as the user's question.
-            """.formatted(guide, screen);
+            """.formatted(guide, PageDocs.features(), screen);
         List<LlmClient.Message> msgs = new ArrayList<>();
         msgs.add(LlmClient.Message.system(sys));
         msgs.add(LlmClient.Message.user("You are now on page: " + (page == null || page.isBlank() ? "(unknown)" : page)));

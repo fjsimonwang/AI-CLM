@@ -109,6 +109,9 @@ public final class PageDocs {
             confidence); "Document" (document editor with Read/Edit toggle when EDIT_CONTRACT, autosave,
             "Re-assemble", "Open full", supporting documents with "Download", plus the "AI document
             review" panel — see below); "Discussion" (comment threads: "New thread", reply, resolve);
+            "Discussion" (comment threads: "New thread", reply, resolve; with a per-contract
+            "Agent collaboration" switch next to the tab label and a "✦ Ask agent" action on each
+            thread — see CROSS-CUTTING FEATURES / "Agent talk" below);
             "Workflow" (workflow name, current state badge, "Start workflow", task list — actions happen
             on the Approvals page); "Obligations" (table with Verify/Close and confidence);
             "Relations" ("Detect with AI" button finds amendments/master/SOW links; AI suggestions await
@@ -239,5 +242,44 @@ public final class PageDocs {
     /** Convenience wrapper. */
     public static String guideFor(String page) {
         return instance().forPage(page);
+    }
+
+    /**
+     * Cross-cutting features that don't live on a single route (they appear on many pages or in
+     * shared components). Always included in the help prompt, regardless of the current page.
+     * KEEP THIS CURRENT: every PR that adds or changes a user-facing feature must update this
+     * block and/or the matching {@code add(...)} page guide above.
+     */
+    public static String features() {
+        return """
+            CROSS-CUTTING FEATURES (available across pages, not tied to one route):
+
+            AGENT COLLABORATION / "AGENT TALK" — each participant on a contract can have a personal
+            AI agent that takes part in that contract's Discussion threads, speaking AS that person
+            (first person), grounded in the contract record.
+            - Global switch: the bot-icon toggle in the top header ("Agent collaboration" chip).
+              Off means your agent neither sends nor receives anything. Set it under your profile /
+              header at any time (PATCH /me/agent-setting).
+            - Per-contract switch: on a contract, the Discussion tab has a small violet switch next
+              to the tab label (visible to the contract owner, creator or general counsel). It must
+              be ON for any agent activity on that contract.
+            - Using it: open a Discussion thread on a contract and click "✦ Ask agent". Pick "Auto —
+              best placed to answer" (the system routes the question to the participant whose role
+              best fits — financial / legal / approval / general) or target a specific person's
+              agent from the dropdown. The chosen agent replies in the thread, tagged "<Name>
+              (agent)" with violet styling.
+            - Back-and-forth: for a targeted question, if the asker also has their agent enabled,
+              the asker's agent may auto-review the answer and post one follow-up question; the
+              target agent answers once more (bounded — it stops after a couple of exchanges).
+            - Agents are advisory: their messages are contributions to the discussion, not
+              approvals or contract changes. A represented user is nudged when their agent has
+              posted something awaiting their attention.
+            - Eligibility: the asker and the represented participant must both be able to view the
+              contract, and the represented participant must have opted in globally.
+
+            AUTO-REJECTION — approvers can define rules that automatically reject a contract when it
+            reaches their approval step with the rule's requirements unmet. Managed on the
+            Auto-rejection page (Work section, needs APPROVE). See that page's guide for details.
+            """;
     }
 }
