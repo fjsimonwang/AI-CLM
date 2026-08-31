@@ -718,13 +718,21 @@ export default function Intake() {
               {paperMode ? " — upload the counterparty's paper contract" : " — describe what you need in plain language"}
             </span>
           </span>
-          <div className="flex items-center gap-2 max-lg:order-3 max-lg:w-full">
+          <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 max-lg:order-3 max-lg:w-full">
           <button
             className="btn shrink-0"
             style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
             onClick={saveDraft}
-            disabled={streaming}
-            title={session?.saved ? "This draft is saved" : "Save this request and its chat so you can resume it later"}
+            disabled={streaming || spec.length === 0 || missingRequired.length > 0}
+            title={
+              spec.length === 0
+                ? "Describe your request first so the form can be filled in"
+                : missingRequired.length > 0
+                ? `Fill all required fields first — still needed: ${missingRequired.join(", ")}`
+                : session?.saved
+                ? "This draft is saved"
+                : "Save this request and its chat so you can resume it later"
+            }
           >
             {session?.saved ? (
               <span className="inline-flex items-center gap-1" style={{ color: "var(--ok)" }}>

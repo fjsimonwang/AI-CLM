@@ -182,6 +182,11 @@ export default function Dashboard() {
                   <Link to={`/contracts/${t.contractId}`} className="link text-sm font-medium">
                     {t.contractNumber}
                   </Link>
+                  {t.discussionUpdate && (
+                    <span className="inline-flex align-[-2px] ml-1.5" title="New discussion activity on this contract">
+                      <Icon.message width={13} height={13} style={{ color: "var(--accent)" }} />
+                    </span>
+                  )}
                   <span className="text-sm text-ink-soft"> · {t.contractTitle}</span>
                   <div className="text-xs text-ink-faint">
                     {t.state} · {t.type} · due {date(t.dueAt)} {t.overdue && <Badge tone="risk">overdue</Badge>}
@@ -377,7 +382,7 @@ function AttentionCard({ mine, editing }: { mine: any; editing: boolean }) {
           {(mine.discussions || []).filter((x: any) => x.awaitingMe).map((x: any) => (
             <Link key={x.threadId} to={`/contracts/${x.contractId}`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
               <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--warn) 15%, transparent)", color: "var(--warn)" }}><Icon.message width={16} height={16} /></span>
-              <div className="min-w-0"><div className="text-sm font-medium truncate">{x.title}</div><div className="text-xs text-ink-faint">{x.contractNumber} · reply awaited</div></div>
+              <div className="min-w-0"><div className="text-sm font-medium truncate">{x.title}</div><div className="text-xs text-ink-faint">{x.contractNumber} · {x.mentioned ? "you were mentioned" : x.askedAgent ? "your agent was asked" : "reply awaited"}</div></div>
             </Link>
           ))}
           {(mine.accessToDecide || []).map((r: any) => (

@@ -26,13 +26,14 @@ public class WorkflowService {
     private final Repos.ClauseVariantUsages clauseUsages;
     private final Repos.ClauseVariants clauseVariants;
     private final Repos.PrecedentLinks precedents;
+    private final AutoRejectService autoReject;
     private final AuditService audit;
 
     public WorkflowService(Repos.WorkflowDefinitions definitions, Repos.WorkflowInstances instances,
                            Repos.WorkflowTasks tasks, Repos.Contracts contracts, Repos.ContractTypes types,
                            Repos.Users users, Repos.LegalEntities entities, Repos.SigningAuthorities signingAuthorities,
                            Repos.ClauseVariantUsages clauseUsages, Repos.ClauseVariants clauseVariants,
-                           Repos.PrecedentLinks precedents, AuditService audit) {
+                           Repos.PrecedentLinks precedents, AutoRejectService autoReject, AuditService audit) {
         this.definitions = definitions;
         this.instances = instances;
         this.tasks = tasks;
@@ -44,6 +45,7 @@ public class WorkflowService {
         this.clauseUsages = clauseUsages;
         this.clauseVariants = clauseVariants;
         this.precedents = precedents;
+        this.autoReject = autoReject;
         this.audit = audit;
     }
 
@@ -159,6 +161,95 @@ public class WorkflowService {
         audit.record("WORKFLOW_TASK", t.id.toString(), "ASSIGNED", actor, null,
                 Map.of("state", t.stateKey, "role", role,
                         "assignee", t.assignedUserId == null ? "unassigned" : t.assignedUserId.toString()));
+        maybeAutoReject(wi, t);
+    }
+
+    /**
+     * Auto-rejection (approver rules): when a new review/approval task lands on a user who owns
+     * enabled rejection rules scoped to this contract, and the rule's requirements are unmet, the
+     * request is rejected automatically on that approver's behalf — deterministic, no LLM involved.
+     * Owners whose global trigger is DELAYED are skipped here; {@link #rejectDueTasks()} evaluates
+     * them once the configured delay has passed.
+     */
+    private void maybeAutoReject(WorkflowInstance wi, WorkflowTask t) {
+        // REVIEW and APPROVAL tasks are human gate-steps a rule owner can pre-decide; REVISION
+        // belongs to the requestor (resubmission) and must never auto-reject.
+        if ("REVISION".equals(t.taskType) || t.assignedUserId == null) return;
+        if (autoReject.settingFor(t.assignedUserId).mode == AutoRejectSetting.Mode.DELAYED) return;
+        Contract c = contracts.findById(wi.contractId).orElse(null);
+        if (c == null) return;
+        applyAutoReject(wi, t, c);
+    }
+
+    /** Shared rejection application for the on-assignment hook and the delayed sweep. */
+    private void applyAutoReject(WorkflowInstance wi, WorkflowTask t, Contract c) {
+        Optional<AutoRejectService.Decision> d = autoReject.rejectionFor(c, t.taskType, t.assignedUserId);
+        if (d.isEmpty()) return;
+
+        // the current state must have a way out to a rejected end state; otherwise skip
+        WorkflowDefinition wf = definitions.findById(wi.workflowDefinitionId).orElse(null);
+        if (wf == null) return;
+        JsonNode stateNode = stateNode(Json.read(wf.definition), wi.currentState);
+        String rejectTarget = null;
+        for (JsonNode tr : stateNode.path("transitions")) {
+            String to = tr.path("to").asText();
+            if ("reject".equals(tr.path("on").asText())) { rejectTarget = to; break; }
+            if (to.contains("reject") && rejectTarget == null) rejectTarget = to;
+        }
+        if (rejectTarget == null) return;
+
+        AutoRejectService.Decision dec = autoReject.applyFired(d.get());
+        AutoRejectService.Eval ev = dec.eval();
+        String reason = "Rule \"" + dec.rule().name + "\": required " + String.join("; ", ev.unmet());
+
+        t.status = "DONE";
+        t.outcome = "AUTO_REJECT";
+        t.comments = reason.length() > 1000 ? reason.substring(0, 1000) : reason;
+        t.completedAt = Instant.now();
+        tasks.save(t);
+
+        wi.currentState = rejectTarget;
+        wi.status = "COMPLETED";
+        wi.completedAt = Instant.now();
+        instances.save(wi);
+
+        c.status = "CLOSED_REJECTED";
+        contracts.save(c);
+
+        audit.record("WORKFLOW_TASK", t.id.toString(), "AUTO_REJECT", null, null,
+                Map.of("rule", dec.rule().name, "ruleId", dec.rule().id.toString(),
+                        "contractNumber", c.contractNumber, "reason", reason));
+        audit.record("AUTO_REJECT_RULE", dec.rule().id.toString(), "FIRED", null, null,
+                Map.of("contractId", c.id.toString(), "contractNumber", c.contractNumber,
+                        "state", t.stateKey, "reason", reason));
+        audit.record("CONTRACT", c.id.toString(), "CLOSED_REJECTED", null, null,
+                Map.of("via", "auto_reject", "rule", dec.rule().name));
+    }
+
+    /**
+     * Delayed-trigger sweep (called from the scheduler): evaluates auto-reject rules for open
+     * review/approval tasks whose assignee's global trigger is DELAYED, once the configured
+     * number of hours has passed since the task was created. Returns rejections applied.
+     */
+    public int rejectDueTasks() {
+        int fired = 0;
+        Instant now = Instant.now();
+        for (WorkflowTask t : tasks.findByStatus("OPEN")) {
+            if ("REVISION".equals(t.taskType) || t.assignedUserId == null) continue;
+            AutoRejectSetting s = autoReject.settingFor(t.assignedUserId);
+            if (s.mode != AutoRejectSetting.Mode.DELAYED || s.delayHours <= 0) continue;
+            // Prospective only: the delay clock runs from when the setting was last changed, so
+            // enabling a delay never retroactively rejects tasks already sitting in the queue.
+            if (t.createdAt.isBefore(s.updatedAt)) continue;
+            if (t.createdAt.plus(s.delayHours, ChronoUnit.HOURS).isAfter(now)) continue;
+            WorkflowInstance wi = instances.findById(t.workflowInstanceId).orElse(null);
+            if (wi == null || !"RUNNING".equals(wi.status)) continue;
+            Contract c = contracts.findById(wi.contractId).orElse(null);
+            if (c == null) continue;
+            applyAutoReject(wi, t, c);
+            fired++;
+        }
+        return fired;
     }
 
     private UUID resolveRole(String role, Contract c) {
@@ -226,7 +317,9 @@ public class WorkflowService {
     public Map<String, Object> status(UUID contractId) {
         List<WorkflowInstance> wis = instances.findByContractId(contractId);
         if (wis.isEmpty()) return Map.of("started", false);
-        WorkflowInstance wi = wis.stream().filter(x -> "RUNNING".equals(x.status)).findFirst().orElse(wis.get(0));
+        WorkflowInstance wi = wis.stream().filter(x -> "RUNNING".equals(x.status)).findFirst()
+                // several instances exist after recall/resubmit cycles: report on the most recent
+                .orElseGet(() -> wis.stream().max(Comparator.comparing(x -> x.startedAt)).orElse(wis.get(0)));
         if ("CANCELLED".equals(wi.status)) return Map.of("started", false);
         List<Map<String, Object>> taskList = tasks.findByWorkflowInstanceId(wi.id).stream()
                 .sorted(Comparator.comparing(t -> t.createdAt))
@@ -254,9 +347,11 @@ public class WorkflowService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> myTasks(UUID userId) {
+        // newest task sent to me first, so the latest approval request is on top
         return tasks.findByAssignedUserIdAndStatus(userId, "OPEN").stream()
                 .map(this::taskMapWithContract)
-                .sorted(Comparator.comparing(m -> String.valueOf(m.get("dueAt"))))
+                .sorted(Comparator.comparing((Map<String, Object> m) -> (Instant) m.get("createdAt"),
+                        Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
@@ -300,6 +395,7 @@ public class WorkflowService {
         m.put("assignee", t.assignedUserId == null ? null
                 : users.findById(t.assignedUserId).map(u -> u.displayName).orElse(null));
         m.put("dueAt", t.dueAt);
+        m.put("createdAt", t.createdAt);
         m.put("outcome", t.outcome);
         m.put("comments", t.comments);
         m.put("overdue", t.dueAt != null && t.dueAt.isBefore(Instant.now()) && "OPEN".equals(t.status));

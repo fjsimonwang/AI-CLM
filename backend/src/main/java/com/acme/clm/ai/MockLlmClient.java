@@ -1,5 +1,6 @@
 package com.acme.clm.ai;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -62,6 +63,9 @@ public class MockLlmClient implements LlmClient {
                 + "\"non_standard\":[],"
                 + "\"decision\":\"Approve so the contract can proceed to signature\"}";
             case "RELATION_CLASSIFY" -> relationClassify(user);
+            case "AGENT_DISCUSS" -> agentDiscuss(user);
+            case "AGENT_CLARIFY" -> agentClarify(user);
+            case "REJECT_RULE" -> rejectRule(user);
             case "HELP_CHAT" -> helpChat(user);
             default -> json ? "{\"answer\":\"(mock) No live model configured.\"}"
                             : "I don't have a live model configured, but the deterministic path is working.";
@@ -209,6 +213,113 @@ public class MockLlmClient implements LlmClient {
                 .append("\",\"confidence\":0.6,\"reasons\":[\"(mock) matched on shared parties/entity and period\"]}");
         }
         return "{\"relations\":[" + rels + "]}";
+    }
+
+    // ---- agent discussion (phase 1: grounded, deterministic; the agent speaks for a participant) ----
+    private String agentDiscuss(String user) {
+        // `user` = "ANSWERING AS: <name> (<role>)\n\nCONTRACT RECORD:\n<...>\n\nQUESTION: <...>" (lower-cased)
+        String persona = "";
+        int asIdx = user.indexOf("answering as:");
+        if (asIdx >= 0) {
+            String tail = user.substring(asIdx + 13);
+            persona = tail.split("\\n", 2)[0].trim();
+        }
+        String question = user.contains("=== question (untrusted) ===")
+                ? user.substring(user.indexOf("=== question (untrusted) ===") + 28,
+                        user.contains("=== end of question ===") ? user.indexOf("=== end of question ===") : user.length())
+                : user;
+        String answer;
+        if (question.contains("term") || question.contains("expir") || question.contains("renew") || question.contains("notice")) {
+            answer = "Per the contract record: check the expiry date, notice period and renewal type on the "
+                + "Overview tab. The Key terms tab lists the extracted term clause with its source span. "
+                + "If a date you need isn't captured, ask the contract owner in this thread.";
+        } else if (question.contains("payment") || question.contains("invoice") || question.contains("fee")
+                || question.contains("value") || question.contains("cost")) {
+            answer = "From the contract record: the contract value and payment-terms days are on the Overview "
+                + "tab (payment terms are stated in days from invoice). For invoicing status, the finance "
+                + "approver or contract owner can confirm — the record itself doesn't track invoices.";
+        } else if (question.contains("liabilit") || question.contains("cap") || question.contains("indemn")) {
+            answer = "The record stores a liability summary on the Overview tab. Check it against the "
+                + "playbook's preferred cap; if it deviates, flag the deviation to the approver before signature.";
+        } else if (question.contains("status") || question.contains("approval") || question.contains("workflow")
+                || question.contains("progress") || question.contains("stage") || question.contains("state")) {
+            answer = "The Workflow tab lists the current workflow state and open approval tasks with assignees "
+                + "and due dates. For timing, contact the assigned approver shown there.";
+        } else if (question.contains("owner") || question.contains("who")) {
+            answer = "The contract owner and assigned lawyer are named on the Overview tab.";
+        } else {
+            answer = "Here is what the record supports: the Overview tab for parties, value and dates; the "
+                + "Key terms tab for extracted terms; the Risks tab for open findings. If what you need isn't "
+                + "captured there, direct the question to the contract owner or the legal team in this thread.";
+        }
+        String reply = "(mock model) "
+                + (persona.isEmpty() ? "" : "On behalf of " + persona + ": ")
+                + answer;
+        return "{\"reply\":\"" + esc(reply) + "\",\"confidence\":0.6}";
+    }
+
+    // ---- asker's agent reviewing the counterparty agent's reply (mock: silent unless the reply
+    // asks something back, then one deterministic follow-up) ----
+    private String agentClarify(String user) {
+        String asker = "";
+        int asIdx = user.indexOf("answering as (the person who asked):");
+        if (asIdx >= 0) asker = user.substring(asIdx + 36).split("\\n", 2)[0].trim();
+        int replyIdx = user.indexOf("=== agent reply (data) ===");
+        String reply = replyIdx >= 0 ? user.substring(replyIdx + 26).trim() : "";
+        if (reply.contains("=== end of agent reply ===")) reply = reply.substring(0, reply.indexOf("=== end of agent reply ===")).trim();
+        if (reply.isEmpty() || !reply.contains("?")) {
+            return "{\"comment\":\"\",\"questionForOther\":\"\",\"confidence\":0.6}";
+        }
+        String comment = "On behalf of " + (asker.isEmpty() ? "the asker" : asker)
+                + ": let me check that against our side of the record.";
+        return "{\"comment\":\"" + esc(comment) + "\",\"questionForOther\":\""
+                + esc("Can you confirm the same from your side of the record?") + "\",\"confidence\":0.55}";
+    }
+
+    // ---- approver auto-rejection rule structuring (deterministic: quoted phrases / named
+    // documents become ATTACHMENT keyword requirements; "and" -> ALL_OF, anything else ANY_OF) ----
+    private String rejectRule(String user) {
+        String instructions = user;
+        int begin = user.indexOf("=== approver instructions (untrusted) ===");
+        if (begin >= 0) {
+            instructions = user.substring(begin).replaceFirst("=== approver instructions \\(untrusted\\) ===", "");
+        }
+        int end = instructions.indexOf("=== end of approver instructions ===");
+        if (end >= 0) instructions = instructions.substring(0, end);
+        instructions = instructions.trim();
+
+        List<String> keywordSets = new ArrayList<>();
+        // quoted phrases first: "TPDD screening", 'NDA'
+        Matcher q = Pattern.compile("\"([^\"]+)\"|'([^']+)'").matcher(instructions);
+        while (q.find()) {
+            String phrase = (q.group(1) != null ? q.group(1) : q.group(2)).trim().toLowerCase();
+            if (!phrase.isEmpty()) keywordSets.add(phrase);
+        }
+        // common document words mentioned without quotes
+        if (instructions.matches(".*(\\bnda\\b|non-disclosure|non disclosure|confidentiality agreement).*")
+                && keywordSets.stream().noneMatch(k -> k.contains("nda"))) {
+            keywordSets.add("nda");
+        }
+        StringBuilder reqs = new StringBuilder();
+        for (String set : keywordSets) {
+            List<String> kws = new ArrayList<>();
+            kws.add("\"" + esc(set) + "\"");
+            if (set.contains("nda")) { kws.add("\"non-disclosure\""); kws.add("\"non disclosure\""); }
+            if (!set.isEmpty()) kws.add("\"" + esc(set.split("\\s+")[0]) + "\"");
+            String label = "Attached: " + set;
+            if (reqs.length() > 0) reqs.append(",");
+            reqs.append("{\"kind\":\"ATTACHMENT\",\"label\":\"").append(esc(label))
+                .append("\",\"keywords\":[").append(String.join(",", kws)).append("]}");
+        }
+        String combinator = instructions.toLowerCase().contains(" and ") && !instructions.toLowerCase().contains(" or ")
+                ? "ALL_OF" : "ANY_OF";
+        String summary = keywordSets.isEmpty()
+                ? "(mock) No executable requirement could be derived from these instructions without a live model."
+                : "(mock) The request must be supported by " + (combinator.equals("ALL_OF") ? "all of" : "at least one of")
+                    + " the referenced attachments from the approver's instructions.";
+        return "{\"combinator\":\"" + combinator + "\",\"requirements\":[" + reqs + "],"
+                + "\"summary\":\"" + esc(summary) + "\","
+                + "\"notes\":[\"(mock model) Structured deterministically; configure a live LLM for full natural-language interpretation.\"]}";
     }
 
     // ---- helpers ----

@@ -257,6 +257,7 @@ public class ContractService {
         m.put("paymentTermsDays", c.paymentTermsDays);
         m.put("liabilitySummary", c.liabilitySummary);
         m.put("editorDocumentId", c.editorDocumentId);
+        m.put("agentCollabEnabled", c.agentCollabEnabled);
         m.put("typeAttributes", Json.readMap(c.typeAttributes));
         m.put("owner", userName(c.ownerUserId));
         m.put("ownerUserId", c.ownerUserId);
@@ -556,6 +557,25 @@ public class ContractService {
         audit.record("CONTRACT", id.toString(), "STATUS_CHANGED", actor,
                 Map.of("status", before), Map.of("status", status));
         return get(id);
+    }
+
+    /** Per-contract switch: allow counterpart agents to discuss this contract. Owner/requestor or ADMIN/GC only. */
+    @Transactional
+    public Map<String, Object> setAgentCollab(UUID id, boolean enabled, UUID actor) {
+        Contract c = contracts.findById(id).orElseThrow(() -> new ApiExceptions.NotFoundException("Contract not found"));
+        if (actor == null || !access.canView(actor, c))
+            throw new ApiExceptions.NotFoundException("Contract not found");
+        if (!(actor.equals(c.ownerUserId) || actor.equals(c.createdBy) || access.seesEverything(actor))) {
+            throw new ApiExceptions.ForbiddenException("Only the contract owner or a general counsel can change agent collaboration.");
+        }
+        boolean before = c.agentCollabEnabled;
+        c.agentCollabEnabled = enabled;
+        c.updatedBy = actor;
+        c.updatedAt = java.time.Instant.now();
+        contracts.save(c);
+        audit.record("CONTRACT", id.toString(), enabled ? "AGENT_COLLAB_ENABLED" : "AGENT_COLLAB_DISABLED",
+                actor, Map.of("enabled", before), Map.of("enabled", enabled));
+        return get(id, actor);
     }
 
     // ---------------- Relations ----------------

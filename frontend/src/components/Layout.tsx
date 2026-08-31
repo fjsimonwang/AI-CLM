@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth, api, usePending } from "../api";
 import { Icon, IconName } from "./icons";
 import { HelpChat } from "./HelpChat";
@@ -36,6 +37,7 @@ const NAV: NavGroup[] = [
       { to: "/intake", label: "New request", icon: "sparkle", perm: "CREATE_INTAKE" },
       { to: "/contracts", label: "Contracts", icon: "file", perm: "VIEW_CONTRACTS" },
       { to: "/approvals", label: "Approvals", icon: "checkCircle", perm: "APPROVE", badge: "openTaskCount" },
+      { to: "/auto-reject", label: "Auto-rejection", icon: "shieldX", perm: "APPROVE" },
       { to: "/obligations", label: "Obligations", icon: "bell", perm: "VIEW_OBLIGATIONS" },
       { to: "/access", label: "Access", icon: "shieldCheck", badge: "accessToDecideCount" },
     ],
@@ -276,6 +278,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Icon.menu width={16} height={16} />
           </button>
           <div className="flex-1" />
+          <AgentOptInChip />
           <select
             className="input hidden sm:block"
             style={{ width: "auto", padding: "0.3rem 0.5rem" }}
@@ -313,5 +316,52 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
       <HelpChat />
     </div>
+  );
+}
+
+/** Per-user agent participation toggle — off means the user's agent neither sends nor receives. */
+function AgentOptInChip() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["me-agent-setting"],
+    queryFn: () => api("/me/agent-setting") as Promise<{ agentOptIn: boolean }>,
+  });
+  const set = useMutation({
+    mutationFn: (enabled: boolean) => api("/me/agent-setting", { method: "PATCH", json: { enabled } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["me-agent-setting"] });
+      qc.invalidateQueries({ queryKey: ["agent-status"] });
+      qc.invalidateQueries({ queryKey: ["agent-agents"] });
+    },
+  });
+  const on = !!q.data?.agentOptIn;
+  return (
+    <button
+      className="btn shrink-0"
+      style={{ padding: "0.3rem 0.6rem", fontSize: "12px" }}
+      disabled={q.isLoading || set.isPending}
+      title={
+        on
+          ? "Agent collaboration: your agent may join contract discussions. Click to turn it off."
+          : "Agent collaboration is off: your agent sends and receives nothing. Click to turn it on."
+      }
+      onClick={() => set.mutate(!on)}
+    >
+      <Icon.bot
+        width={15}
+        height={15}
+        style={{ color: on ? "#7c3aed" : "currentColor", transition: "color 0.2s" }}
+      />
+      <span
+        className="relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 shrink-0"
+        style={{ background: on ? "#22c55e" : "var(--ink-faint)" }}
+      >
+        <span
+          className="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow"
+          style={{ transition: "transform 0.2s", transform: on ? "translateX(14px)" : "none" }}
+        />
+      </span>
+      <span className="hidden sm:inline">Agent&nbsp;talk</span>
+    </button>
   );
 }

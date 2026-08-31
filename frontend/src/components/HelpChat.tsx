@@ -33,7 +33,7 @@ function loadDock(): Dock {
       const p = JSON.parse(old);
       if (typeof p?.left === "number") {
         localStorage.removeItem("clm-help-pos");
-        const dock = { side: p.left < window.innerWidth / 2 ? "left" : "right", frac: clampFrac(p.top / Math.max(1, window.innerHeight)) };
+        const dock: Dock = { side: p.left < window.innerWidth / 2 ? "left" : "right", frac: clampFrac(p.top / Math.max(1, window.innerHeight)) };
         localStorage.setItem("clm-help-dock", JSON.stringify(dock));
         return dock;
       }

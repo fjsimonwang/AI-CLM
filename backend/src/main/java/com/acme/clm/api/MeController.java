@@ -54,13 +54,19 @@ public class MeController {
 
         // open discussions on those contracts where I'm not the last to speak
         List<Map<String, Object>> discussions = new ArrayList<>();
+        Set<UUID> contractsWithUpdates = new HashSet<>();
         for (UUID cid : mine) {
             for (CommentThread th : threads.findByEntityTypeAndEntityIdOrderByCreatedAtDesc("CONTRACT", cid.toString())) {
                 if (!"OPEN".equals(th.status)) continue;
                 var msgs = messages.findByThreadIdOrderByCreatedAtAsc(th.id);
                 if (msgs.isEmpty()) continue;
-                boolean iAmLast = msgs.get(msgs.size() - 1).authorUserId.equals(me);
-                boolean iParticipated = msgs.stream().anyMatch(m -> m.authorUserId.equals(me));
+                var last = msgs.get(msgs.size() - 1);
+                boolean lastWasAgent = last.authorUserId == null;
+                boolean iAmLast = !lastWasAgent && Objects.equals(last.authorUserId, me);
+                boolean iParticipated = msgs.stream().anyMatch(m -> Objects.equals(m.authorUserId, me));
+                boolean myAgentSpoke = msgs.stream().anyMatch(
+                        m -> m.authorUserId == null && !m.deleted && me.equals(m.representedUserId));
+                boolean mentionedMe = msgs.stream().anyMatch(m -> !m.deleted && mentionsMe(m.mentions, me));
                 Contract c = contracts.findById(cid).orElse(null);
                 Map<String, Object> dm = new LinkedHashMap<>();
                 dm.put("threadId", th.id);
@@ -68,11 +74,37 @@ public class MeController {
                 dm.put("contractId", cid);
                 dm.put("contractNumber", c == null ? null : c.contractNumber);
                 dm.put("messages", msgs.size());
-                dm.put("awaitingMe", !iAmLast && (iParticipated || me.equals(c == null ? null : c.ownerUserId)));
+                dm.put("askedAgent", myAgentSpoke);
+                dm.put("mentioned", mentionedMe);
+                boolean awaitingMe;
+                if (lastWasAgent) {
+                    // agents speak AS participants and defer hard asks to their human
+                    // ("I'd need %s to confirm") — every represented user of the trailing
+                    // agent block should review what was said on their behalf
+                    Set<UUID> spokenFor = new HashSet<>();
+                    for (int i = msgs.size() - 1; i >= 0 && msgs.get(i).authorUserId == null; i--)
+                        if (!msgs.get(i).deleted && msgs.get(i).representedUserId != null)
+                            spokenFor.add(msgs.get(i).representedUserId);
+                    awaitingMe = spokenFor.contains(me);
+                } else {
+                    // a discussion is asking me (or my agent) when I was @-mentioned,
+                    // when my agent has been answering on my behalf, when I took part
+                    // myself, or when the contract is mine and I'm not the last speaker
+                    awaitingMe = !iAmLast && (iParticipated || myAgentSpoke || mentionedMe
+                            || me.equals(c == null ? null : c.ownerUserId));
+                }
+                dm.put("awaitingMe", awaitingMe);
                 discussions.add(dm);
+                if (!Objects.equals(last.authorUserId, me)) contractsWithUpdates.add(cid);
             }
         }
         long discussionsAwaiting = discussions.stream().filter(d -> Boolean.TRUE.equals(d.get("awaitingMe"))).count();
+
+        // flag tasks whose contract has discussion responses since the user last spoke
+        for (Map<String, Object> t : tasks) {
+            Object cid = t.get("contractId");
+            t.put("discussionUpdate", cid != null && contractsWithUpdates.contains(UUID.fromString(String.valueOf(cid))));
+        }
 
         // access requests I can decide
         List<Map<String, Object>> toDecide = new ArrayList<>();
@@ -142,6 +174,44 @@ public class MeController {
                 .limit(limit)
                 .map(e -> Map.<String, Object>of("type", e.getKey(), "count", e.getValue()))
                 .toList();
+    }
+
+    // ----------------------------------------------------- agent collaboration opt-in
+
+    public static final String AGENT_OPTIN_KEY = "agent_collab";
+
+    /** Whether the current user's counterpart agent may participate in agent discussions. */
+    @GetMapping("/agent-setting")
+    public Map<String, Object> agentSetting() {
+        return Map.of("agentOptIn", readAgentOptIn(current.id()));
+    }
+
+    @PatchMapping("/agent-setting")
+    public Map<String, Object> setAgentSetting(@RequestBody Map<String, Object> body) {
+        UUID me = current.id();
+        boolean enabled = Boolean.TRUE.equals(body.get("agentOptIn")) || Boolean.TRUE.equals(body.get("enabled"));
+        UserSetting s = settings.findById(new UserSetting.Key(me, AGENT_OPTIN_KEY)).orElseGet(UserSetting::new);
+        s.userId = me;
+        s.prefKey = AGENT_OPTIN_KEY;
+        s.value = com.acme.clm.common.Json.write(Map.of("enabled", enabled));
+        s.updatedAt = java.time.Instant.now();
+        settings.save(s);
+        return Map.of("agentOptIn", enabled);
+    }
+
+    private boolean readAgentOptIn(UUID userId) {
+        return settings.findById(new UserSetting.Key(userId, AGENT_OPTIN_KEY))
+                .map(s -> Boolean.TRUE.equals(com.acme.clm.common.Json.readMap(s.value).get("enabled")))
+                .orElse(false);
+    }
+
+    /** True when the message's mentions JSON array contains the given user id. */
+    private static boolean mentionsMe(String mentionsJson, UUID me) {
+        if (mentionsJson == null) return false;
+        for (var n : com.acme.clm.common.Json.read(mentionsJson)) {
+            if (me.toString().equals(n.asText())) return true;
+        }
+        return false;
     }
 
     // ----------------------------------------------------- dashboard config (layout + custom charts)

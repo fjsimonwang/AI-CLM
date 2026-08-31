@@ -113,6 +113,9 @@ public class Contract {
     @Column(name = "editor_document_id")
     public String editorDocumentId;
 
+    @Column(name = "agent_collab_enabled", nullable = false)
+    public boolean agentCollabEnabled = false;
+
     @Column(name = "created_at")
     public Instant createdAt = Instant.now();
 

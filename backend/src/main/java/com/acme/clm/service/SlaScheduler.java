@@ -23,4 +23,15 @@ public class SlaScheduler {
             log.warn("SLA sweep failed: {}", e.getMessage());
         }
     }
+
+    /** Delayed auto-rejection: rules whose owner opted to wait N hours before evaluating. */
+    @Scheduled(fixedDelay = 300_000L, initialDelay = 90_000L)
+    public void autoRejectSweep() {
+        try {
+            int n = workflow.rejectDueTasks();
+            if (n > 0) log.info("Auto-reject sweep fired {} delayed rejection(s)", n);
+        } catch (Exception e) {
+            log.warn("Auto-reject sweep failed: {}", e.getMessage());
+        }
+    }
 }
