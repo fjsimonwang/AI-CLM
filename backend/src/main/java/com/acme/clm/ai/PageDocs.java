@@ -52,15 +52,19 @@ public final class PageDocs {
             "Obligations overdue", "Open workflow tasks"), "Contracts by type", "Expiry & renewal
             pipeline", "Risk distribution", "Migration" (migrated contracts + unverified low-confidence
             terms), "Ask the portfolio" (clickable suggested questions that run the AI inquiry),
-            "My open tasks" (links to contracts, "Review" button to Approvals), plus any saved
+            "My open items" (rejected contracts to revise + open workflow tasks; each has a "Review"
+            button — for an approver it goes to the Approvals page, otherwise to the contract's
+            Workflow tab; the "All approvals" link shows only for users with APPROVE), plus any saved
             inquiry chart sections (live bar/pie charts, with a "refine" link back into the Contracts
-            inquiry). "Needs your attention" lists drafts to review/submit, open tasks, discussions
-            awaiting reply, access requests — each links to the right page.
+            inquiry). "Needs your attention" lists drafts to review/submit, rejected contracts, open
+            tasks, discussions awaiting reply, access requests — each links to the right page.
             Customize mode: drag to reorder, half/full width per section, hide (eye) sections;
             a "Hidden sections" card can re-show them; edits auto-save (PUT /me/dashboard-config).
-            AI: the "AI insight" section polls /ai/insight while generating (flashing red dot +
-            signal-count badge when there is overdue/risky work), then shows "What matters now",
-            "Suspicious & worth checking", "Suggested next actions".
+            AI: the "AI insight" section (collapsible, subtle styling — no flashing) shows a fast
+            triage built ONLY from your open tasks and attention items: a short summary plus a few
+            ranked items. A "Deeper analysis" button runs the heavier review of your audit trail,
+            AI activity, risks and obligations ("What matters now", "Suspicious & worth checking",
+            "Suggested next actions") on demand.
             No permission gates; data is access-filtered server-side.
             """);
         add("/intake", """
