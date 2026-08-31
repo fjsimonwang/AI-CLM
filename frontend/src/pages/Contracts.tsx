@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api, money, date } from "../api";
-import { Card, Badge, Spinner, Empty, statusTone, riskTone } from "../components/ui";
+import { api } from "../api";
+import { Card, Spinner } from "../components/ui";
 import { SplitPane, useSplitStore } from "../components/SplitPane";
 import { InquiryPanel } from "../components/InquiryPanel";
+import { ContractTable } from "../components/ContractTable";
 import { Icon } from "../components/icons";
 
 type Filters = {
@@ -95,45 +96,8 @@ function ContractList({ f, set, inquiryActive, onClearInquiry }: {
 
       {list.isLoading ? (
         <Spinner />
-      ) : (list.data || []).length === 0 ? (
-        <Empty>No contracts match these filters.</Empty>
       ) : (
-        <Card className="!p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-ink-faint border-b border-border">
-                <th className="px-3 py-2 font-medium">Contract</th>
-                <th className="px-3 py-2 font-medium">Type</th>
-                <th className="px-3 py-2 font-medium">Counterparty</th>
-                <th className="px-3 py-2 font-medium">Entity</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium text-right">Value</th>
-                <th className="px-3 py-2 font-medium">Expiry</th>
-                <th className="px-3 py-2 font-medium">Risk</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(list.data || []).map((c: any) => (
-                <tr key={c.id} className="border-b border-border last:border-0 hover:bg-surface-2">
-                  <td className="px-3 py-2.5">
-                    <Link to={`/contracts/${c.id}`} className="link font-medium">{c.contractNumber}</Link>
-                    <div className="text-xs text-ink-faint">{c.title}</div>
-                  </td>
-                  <td className="px-3 py-2.5">{c.type}</td>
-                  <td className="px-3 py-2.5">{(c.counterparties || []).join(", ") || "—"}</td>
-                  <td className="px-3 py-2.5">{c.entity}</td>
-                  <td className="px-3 py-2.5"><Badge tone={statusTone(c.status)}>{c.status}</Badge></td>
-                  <td className="px-3 py-2.5 text-right tabular">{money(c.valueAmount, c.currency)}</td>
-                  <td className="px-3 py-2.5 tabular">
-                    {date(c.expiryDate)}
-                    {c.source === "MIGRATED" && <span title="migrated, some terms unverified"> ·<Badge tone="warn">migrated</Badge></span>}
-                  </td>
-                  <td className="px-3 py-2.5"><Badge tone={riskTone(c.riskTier)}>{c.riskTier || "—"}</Badge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        <ContractTable rows={list.data || []} />
       )}
     </div>
   );
