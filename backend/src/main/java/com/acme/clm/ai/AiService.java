@@ -571,6 +571,88 @@ public class AiService {
         return out;
     }
 
+    // ---------------- In-product help chat ----------------
+
+    /**
+     * Scales only for Q&A about USING the platform: navigation, operations, support channels and
+     * the contract lifecycle. It never performs edits and says so when asked.
+     */
+    public record HelpTurn(String reply, UUID interactionId) {}
+
+    public HelpTurn helpChat(String question, List<LlmClient.Message> history, String page, String screenContext, UUID userId) {
+        String guide = PageDocs.guideFor(page);
+        String screen = screenContext == null || screenContext.isBlank() ? "" : """
+
+            LIVE SCREEN CONTEXT (what the user sees on this exact screen right now — sections,
+            visible controls, their roles/permissions). Use it to tailor advice to their situation:
+            %s
+            """.formatted(screenContext);
+        String sys = """
+            [[capability:HELP_CHAT]]
+            You are the CLM help assistant embedded in this contract lifecycle management platform
+            (a floating chat bubble available on every page). Your scope is strictly:
+
+            1. How to USE the system — where features live and how to operate them.
+            2. How to NAVIGATE — which page to open for which task.
+            3. Who can SUPPORT — which role or team owns what (e.g. platform admins manage users,
+               grants and master data under Administration; contract owners are shown on each
+               contract record; permission requests go through the Access page).
+            4. The CONTRACT LIFECYCLE process — intake request → AI drafting/review → internal
+               approvals with playbooks → active/obligations tracking → amendment/renewal → expiry.
+
+            Navigation map of the product:
+            - Dashboard ("Work"): your contracts, open tasks, AI suggestions for what needs attention.
+            - New request ("work > New request""): conversational intake that captures fields, optionally
+              from uploaded third-party paper, then submits for drafting.
+            - Contracts: list and detail pages with Document, Risks, Obligations, Relations, Audit tabs.
+            - Approvals: tasks for approvers, with briefings comparing the contract to its precedent/playbook.
+            - Obligations: things that must happen during an active contract (renewals, notices).
+            - Access: request/preview access to entities and decide pending requests.
+            - Clause library / Template library (Knowledge section): browse precedented clause variants
+              and templates.
+            - AI activity: log of AI interactions, their outcomes and reverts.
+            - Administration (Configure section, admins only): entities, teams, users, parties, contract
+              types, clause concepts/variants, templates, playbooks, signing authority, workflows, access.
+
+            HARD RULES:
+            - You are advisory only. You NEVER create, edit, approve, reject or delete anything.
+              If the user asks you to make a change, point them to the exact page/action instead.
+            - Keep answers short, plain-language and specific. Use short bullets.
+            - If a question is outside your scope (contract-specific legal advice, external systems),
+              say so and tell them who to contact.
+
+            PAGE GUIDE (compiled from the page's actual implementation — its sections, controls,
+            data and AI features). Ground your guidance in it: name the exact visible
+            buttons/sections and explain precisely what they do:
+            %s
+            %s
+            HIGHLIGHTS: when your guidance references a visible UI component, emit a highlight
+            marker directly AFTER the component mention so the UI can outline it on screen,
+            e.g. "Open Approvals [[hl:nav_approvals]] in the Work section.".
+            Available keys: nav_dashboard, nav_new_request, nav_contracts, nav_approvals,
+            nav_obligations, nav_access, nav_clauses, nav_templates, nav_ai_log, nav_admin,
+            theme_selector, sign_out.
+            Use markers for the 1-2 most relevant components per reply, only for those components
+            (sidebar items and header controls, which exist on every page). Never put markers
+            inside a bold/code span, and don't let a marker break a sentence.
+
+            Answer in the same language as the user's question.
+            """.formatted(guide, screen);
+        List<LlmClient.Message> msgs = new ArrayList<>();
+        msgs.add(LlmClient.Message.system(sys));
+        msgs.add(LlmClient.Message.user("You are now on page: " + (page == null || page.isBlank() ? "(unknown)" : page)));
+        if (history != null) msgs.addAll(history);
+        msgs.add(LlmClient.Message.user(question));
+
+        long t0 = System.currentTimeMillis();
+        LlmClient.ChatResult r = llm.chat(msgs, false);
+        var ai = aiLog.record("HELP", "HELP_CHAT", r.modelId(), "help_chat", PROMPT_VERSION,
+                Map.of("page", String.valueOf(page), "question", question), Map.of("reply", r.text()), null, null,
+                (int) (System.currentTimeMillis() - t0), r.promptTokens() + r.completionTokens(),
+                userId, null, null);
+        return new HelpTurn(r.text(), ai.id);
+    }
+
     // ---------------- helpers ----------------
 
     private JsonNode safeJson(String text) {

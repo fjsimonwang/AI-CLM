@@ -2,6 +2,7 @@ package com.acme.clm.api;
 
 import com.acme.clm.ai.AiInteractionLog;
 import com.acme.clm.ai.AiService;
+import com.acme.clm.ai.LlmClient;
 import com.acme.clm.common.ApiExceptions;
 import com.acme.clm.common.Json;
 import com.acme.clm.config.CurrentUser;
@@ -239,6 +240,25 @@ public class AiController {
         Map<String, Object> out = new LinkedHashMap<>(insightService.view(current.id(), force));
         out.put("modelLive", ai.modelIsLive());
         return out;
+    }
+
+    public record HelpRequest(String message, String page, String pageContext, List<Map<String, String>> history) {}
+
+    /** Q&A about using the platform (navigation, operations, support, lifecycle). Advisory only. */
+    @PostMapping("/help")
+    public Map<String, Object> help(@RequestBody HelpRequest req) {
+        List<LlmClient.Message> history = new ArrayList<>();
+        if (req.history() != null) {
+            for (Map<String, String> m : req.history()) {
+                String role = String.valueOf(m.getOrDefault("role", "user"));
+                String content = String.valueOf(m.getOrDefault("content", ""));
+                if (content.isBlank()) continue;
+                if ("assistant".equals(role)) history.add(LlmClient.Message.assistant(content));
+                else history.add(LlmClient.Message.user(content));
+            }
+        }
+        AiService.HelpTurn t = ai.helpChat(String.valueOf(req.message()), history, req.page(), req.pageContext(), current.id());
+        return Map.of("reply", t.reply(), "interactionId", t.interactionId(), "modelLive", ai.modelIsLive());
     }
 
     private String buildPlaybook(String conceptCode) {
