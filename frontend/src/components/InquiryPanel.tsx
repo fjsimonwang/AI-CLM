@@ -106,7 +106,7 @@ export function InquiryPanel({ onFilters }: { onFilters: (filters: Record<string
   }
 
   return (
-    <Card className="flex flex-col !p-0 h-[calc(100vh-160px)]">
+    <Card className="flex flex-col !p-0 max-lg:h-[70vh] lg:h-[calc(100vh-160px)]">
       <div className="px-3 py-3 border-b border-border flex items-center justify-between gap-2">
         <span className="text-sm font-medium truncate">
           AI inquiry
@@ -237,7 +237,7 @@ export function InquiryPanel({ onFilters }: { onFilters: (filters: Record<string
                       value={chartTitle}
                       onChange={(e) => setChartTitle(e.target.value)}
                     />
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <select className="input" value={chartType} onChange={(e) => setChartType(e.target.value)}>
                         <option value="bar">Bar chart</option>
                         <option value="pie">Pie chart</option>
@@ -274,7 +274,8 @@ export function InquiryPanel({ onFilters }: { onFilters: (filters: Record<string
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
-                    <table className="w-full text-xs mt-2">
+                    <div className="overflow-x-auto mt-2">
+                      <table className="w-full text-xs">
                       <thead>
                         <tr className="text-left text-ink-faint border-b border-border">
                           <th className="py-1.5 font-medium">{GROUP_LABEL[answer.groupBy] || answer.groupBy}</th>
@@ -291,7 +292,8 @@ export function InquiryPanel({ onFilters }: { onFilters: (filters: Record<string
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                      </table>
+                    </div>
                   </Card>
                 )}
 

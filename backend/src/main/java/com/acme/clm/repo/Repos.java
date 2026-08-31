@@ -117,6 +117,7 @@ public final class Repos {
     public interface IntakeSessions extends JpaRepository<IntakeSession, UUID> {
         List<IntakeSession> findByRequesterUserIdOrderByUpdatedAtDesc(UUID userId);
         java.util.Optional<IntakeSession> findTopByRequestNumberStartingWithOrderByRequestNumberDesc(String prefix);
+        java.util.Optional<IntakeSession> findFirstByResultingContractIdOrderByUpdatedAtDesc(UUID resultingContractId);
     }
 
     public interface IntakeAttachments extends JpaRepository<IntakeAttachment, UUID> {

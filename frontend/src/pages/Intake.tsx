@@ -28,6 +28,25 @@ type Field = {
 const provLabel = (p?: string) =>
   (p || "").replace(/_/g, " ").toLowerCase().replace("unconfirmed", "").trim();
 
+/** Field-group → brand color, so each section of the request form reads as its own zone. */
+const GROUP_COLORS: Record<string, string> = {
+  BASICS: "var(--accent)",
+  SCOPE: "var(--teal)",
+  "TERM & RENEWAL": "var(--orange)",
+  "DATA & PRIVACY": "var(--info)",
+  GOVERNANCE: "var(--ai)",
+  "EXPECTED ROUTING": "var(--warn)",
+};
+const GROUP_PALETTE = GROUP_COLORS;
+const GROUP_RAINBOW = ["var(--accent)", "var(--teal)", "var(--info)", "var(--ai)", "var(--orange)", "var(--warn)"];
+function groupColor(groupName: string): string {
+  const k = groupName.trim().toUpperCase();
+  if (GROUP_PALETTE[k]) return GROUP_PALETTE[k];
+  let h = 0;
+  for (const ch of k) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return GROUP_RAINBOW[h % GROUP_RAINBOW.length];
+}
+
 function groupFields(spec: Field[]): [string, Field[]][] {
   const groups: Record<string, Field[]> = {};
   const order: string[] = [];
@@ -64,6 +83,7 @@ export default function Intake() {
   const [otherText, setOtherText] = useState("");
   const [picked, setPicked] = useState<Record<string, string>>({}); // field key → chosen quick answer
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"submit" | "cancel" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paperMode, setPaperMode] = useState(false); // 3rd-party paper upload flow
   const [uploading, setUploading] = useState(false);
@@ -482,12 +502,22 @@ export default function Intake() {
       await api(`/workflow/start/${result.contractId}`, { method: "POST" });
       qc.invalidateQueries({ queryKey: ["contracts"] });
       qc.invalidateQueries({ queryKey: ["me-summary"] });
-      nav(`/contracts/${result.contractId}`);
+      nav(`/contracts/${result.contractId}`, { state: { justSubmitted: true } });
     } catch (e: any) {
       setSubmitError(e.message);
     } finally {
       setSubmittingApproval(false);
     }
+  }
+
+  // Cancel on the review page: keep the draft (so nothing is lost), then return
+  // to a fresh New request chat.
+  async function cancelReview() {
+    setConfirmAction(null);
+    try {
+      await saveReviewDraft();
+    } catch { /* saveReviewDraft surfaces its own error state */ }
+    await newChat();
   }
 
   // Save draft on the review page: persist the current document text and keep the
@@ -516,7 +546,8 @@ export default function Intake() {
 
   if (result) {
     return (
-      <div className="max-w-7xl mx-auto space-y-4 flex flex-col h-[calc(100vh-120px)]">
+      <>
+      <div className="max-w-7xl mx-auto space-y-4 flex flex-col max-lg:h-auto lg:h-[calc(100vh-120px)]">
         <div className="grid gap-4 items-stretch lg:grid-cols-[2fr_1fr] flex-1 lg:min-h-0">
         <div className="min-w-0 flex flex-col gap-4 lg:h-full lg:min-h-0 lg:overflow-y-auto">
         <Card>
@@ -546,7 +577,7 @@ export default function Intake() {
             </div>
           )}
           <div className="flex flex-wrap gap-2 mt-4">
-            <button className="btn btn-primary" disabled={submittingApproval} onClick={submitForApproval}>
+            <button className="btn btn-primary" disabled={submittingApproval} onClick={() => setConfirmAction("submit")}>
               <Icon.checkCircle width={15} height={15} />
               {submittingApproval ? "Submitting…" : "Submit for approval"}
             </button>
@@ -554,7 +585,10 @@ export default function Intake() {
               <Icon.file width={15} height={15} />
               {savingReviewDraft ? "Saving…" : draftSaved ? "Draft saved ✓" : "Save draft"}
             </button>
-            <button className="btn" onClick={() => nav("/intake")}>Start another</button>
+            <button className="btn" disabled={submittingApproval} onClick={() => setConfirmAction("cancel")}>
+              <Icon.x width={15} height={15} />
+              Cancel
+            </button>
           </div>
           {draftSaved && (
             <div className="text-[11px] text-ink-faint mt-1.5">
@@ -591,6 +625,50 @@ export default function Intake() {
         </div>
         </div>
       </div>
+
+      {confirmAction && (
+        <div
+          className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(3px)" }}
+          onClick={() => setConfirmAction(null)}
+        >
+          <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            {confirmAction === "submit" ? (
+              <>
+                <h2 className="text-base font-medium">Submit for approval?</h2>
+                <p className="text-sm text-ink-soft mt-2 leading-relaxed">
+                  <b>{result.contractNumber}</b> will move into the approval workflow and the assigned
+                  approver will be notified. You can recall it to draft while it's still in review.
+                </p>
+                <div className="flex justify-end gap-2 mt-5">
+                  <button className="btn" onClick={() => setConfirmAction(null)}>Go back</button>
+                  <button
+                    className="btn btn-primary"
+                    disabled={submittingApproval}
+                    onClick={() => { setConfirmAction(null); submitForApproval(); }}
+                  >
+                    <Icon.checkCircle width={14} height={14} />
+                    {submittingApproval ? "Submitting…" : "Submit"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-base font-medium">Cancel and start a new request?</h2>
+                <p className="text-sm text-ink-soft mt-2 leading-relaxed">
+                  Your draft stays in the Drafts list with its request number — you can resume it any time.
+                  This takes you back to the New request page.
+                </p>
+                <div className="flex justify-end gap-2 mt-5">
+                  <button className="btn" onClick={() => setConfirmAction(null)}>Stay here</button>
+                  <button className="btn btn-primary" onClick={cancelReview}>Cancel request</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 
@@ -626,14 +704,21 @@ export default function Intake() {
     )}
     <SplitPane
       left={<>
-      <Card className="flex flex-col !p-0 h-[calc(100vh-160px)]">
-        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+      <Card className="flex flex-col !p-0 max-lg:h-[75vh] lg:h-[calc(100vh-160px)]">
+        <div
+          className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2"
+          style={{ background: "linear-gradient(90deg, var(--accent-soft) 0%, transparent 70%)" }}
+        >
+          <span className="w-6 h-6 rounded-[8px] bg-accent flex items-center justify-center shrink-0" style={{ background: "var(--accent)" }}>
+            <Icon.sparkle width={13} height={13} style={{ color: "#fff" }} />
+          </span>
           <span className="text-sm font-medium truncate flex-1">
             New request
             <span className="text-ink-faint font-normal">
               {paperMode ? " — upload the counterparty's paper contract" : " — describe what you need in plain language"}
             </span>
           </span>
+          <div className="flex items-center gap-2 max-lg:order-3 max-lg:w-full">
           <button
             className="btn shrink-0"
             style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
@@ -669,6 +754,7 @@ export default function Intake() {
           >
             <Icon.plus width={13} height={13} /> New chat
           </button>
+          </div>
         </div>
         {showDrafts && (
           <div className="px-4 py-2 border-b border-border bg-surface-2 max-h-56 overflow-y-auto space-y-1">
@@ -1069,11 +1155,16 @@ export default function Intake() {
       </Card>
       </>}
       right={<>
-      <div className="space-y-4 h-[calc(100vh-160px)] overflow-y-auto pr-1 pb-20">
-        <div className="space-y-4 h-[calc(100vh-160px)] overflow-y-auto pr-1 pb-20">
+      <div className="space-y-4 max-lg:h-auto max-lg:overflow-visible lg:h-[calc(100vh-160px)] lg:overflow-y-auto pr-1 pb-20">
+        <div className="space-y-4 max-lg:h-auto max-lg:overflow-visible lg:h-[calc(100vh-160px)] lg:overflow-y-auto pr-1 pb-20">
         {session?.paperFilename && (
           <Card>
-            <SectionTitle>Third-party paper</SectionTitle>
+            <SectionTitle>
+              <span className="inline-flex items-center gap-1.5" style={{ color: "var(--ai)" }}>
+                <Icon.file width={13} height={13} />
+                Third-party paper
+              </span>
+            </SectionTitle>
             <div className="flex items-center gap-2">
               <Icon.file width={18} height={18} style={{ color: "var(--accent)", flexShrink: 0 }} />
               <div className="min-w-0 flex-1">
@@ -1109,7 +1200,10 @@ export default function Intake() {
               session?.contractType ? <Badge tone="neutral">{session.contractType}</Badge> : undefined
             }
           >
-            Request details
+            <span className="inline-flex items-center gap-1.5">
+              <Icon.checkCircle width={13} height={13} style={{ color: "var(--accent)" }} />
+              Request details
+            </span>
           </SectionTitle>
           <p className="text-xs text-ink-faint mb-3">
             These are the fields this contract type needs. They fill in as you talk; edit any of them directly.
@@ -1124,12 +1218,28 @@ export default function Intake() {
             <div className="space-y-4">
               {groupFields(spec).map(([groupName, groupFieldsList]) => (
                 <div key={groupName}>
-                  {groupName !== "Basics" && (
-                    <div className="text-[10px] font-medium uppercase tracking-wider text-ink-faint mb-1.5">
-                      {groupName}
+                  {groupName !== "Basics" ? (
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span
+                        className="inline-block w-[3px] h-3 rounded-full"
+                        style={{ background: groupColor(groupName) }}
+                      />
+                      <span
+                        className="text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ color: "color-mix(in srgb, " + groupColor(groupName) + " 80%, var(--ink))" }}
+                      >
+                        {groupName}
+                      </span>
                     </div>
-                  )}
-                  <div className="space-y-2.5">
+                  ) : null}
+                  <div
+                    className="space-y-2.5"
+                    style={groupName !== "Basics" ? {
+                      borderLeft: "2px solid color-mix(in srgb, " + groupColor(groupName) + " 22%, transparent)",
+                      paddingLeft: 10,
+                      marginLeft: 1,
+                    } : undefined}
+                  >
                     {groupFieldsList.map((f) => {
                       const needsConfirm = needs.includes(f.key);
                       const prov = provenance[f.key];
@@ -1192,7 +1302,12 @@ export default function Intake() {
 
         {triage && (
           <Card>
-            <SectionTitle>Expected routing</SectionTitle>
+            <SectionTitle>
+              <span className="inline-flex items-center gap-1.5">
+                <Icon.sparkle width={13} height={13} style={{ color: "var(--orange)" }} />
+                Expected routing
+              </span>
+            </SectionTitle>
             <div className="text-sm">
               <Badge tone={triage.path === "LEGAL_REVIEW" ? "risk" : triage.path === "STANDARD_APPROVAL" ? "warn" : "ok"}>
                 {triage.pathLabel}
@@ -1210,7 +1325,12 @@ export default function Intake() {
 
         {(session?.precedents || []).length > 0 && (
           <Card>
-            <SectionTitle>Precedents</SectionTitle>
+            <SectionTitle>
+              <span className="inline-flex items-center gap-1.5">
+                <Icon.handshake width={13} height={13} style={{ color: "var(--ai)" }} />
+                Precedents
+              </span>
+            </SectionTitle>
             <p className="text-xs text-ink-faint mb-2">Start from one of these rather than a blank contract.</p>
             <div className="space-y-2">
               {session.precedents.map((p: any) => (
@@ -1234,7 +1354,12 @@ export default function Intake() {
         )}
 
         <Card>
-          <SectionTitle>Supporting documents</SectionTitle>
+          <SectionTitle>
+            <span className="inline-flex items-center gap-1.5">
+              <Icon.file width={13} height={13} style={{ color: "var(--teal)" }} />
+              Supporting documents
+            </span>
+          </SectionTitle>
           <p className="text-xs text-ink-faint mb-2">
             Optional — attach extra files (emails, schedules, drafts) to this request. They are carried to the contract.
           </p>
@@ -1299,10 +1424,11 @@ export default function Intake() {
             </div>
           )}
           <button
-            className="btn btn-primary shadow-lg"
+            className="btn btn-ai shadow-lg"
             disabled={!canSubmit || submitting}
             onClick={submit}
           >
+            <Icon.sparkle width={14} height={14} />
             {submitting ? "Generating…" : "Generate Document Draft"}
           </button>
         </div>

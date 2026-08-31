@@ -62,6 +62,7 @@ public class MockLlmClient implements LlmClient {
                 + "\"non_standard\":[],"
                 + "\"decision\":\"Approve so the contract can proceed to signature\"}";
             case "RELATION_CLASSIFY" -> relationClassify(user);
+            case "HELP_CHAT" -> helpChat(user);
             default -> json ? "{\"answer\":\"(mock) No live model configured.\"}"
                             : "I don't have a live model configured, but the deterministic path is working.";
         };
@@ -232,5 +233,38 @@ public class MockLlmClient implements LlmClient {
             if (s.contains(k)) return Character.toUpperCase(k.charAt(0)) + k.substring(1);
         }
         return null;
+    }
+
+    private static String helpChat(String user) {
+        String a;
+        if (user.contains("new") && (user.contains("contract") || user.contains("request"))
+                || user.contains("intake") || user.contains("start")) {
+            a = "To start a new contract request, open \"New request\" [[hl:nav_new_request]] in the Work section "
+                + "of the sidebar. Answer the intake assistant's questions (or upload third-party paper), review "
+                + "the captured fields in the form panel, then submit for drafting and review.";
+        } else if (user.contains("approv")) {
+            a = "Approvals live in the \"Approvals\" page [[hl:nav_approvals]] (Work section, requires the APPROVE "
+                + "permission). Each task shows a briefing of what changed and what deviates from the playbook; "
+                + "approve or reject with a comment. Requesters can follow status on the contract's detail page.";
+        } else if (user.contains("obligation") || user.contains("renew") || user.contains("expire")) {
+            a = "Obligations track what must happen while a contract is active (renewals, notices, payments). "
+                + "Open the \"Obligations\" page [[hl:nav_obligations]] to see what is due; you can also find them "
+                + "on each contract's Obligations tab. The Dashboard [[hl:nav_dashboard]] highlights upcoming expiries.";
+        } else if (user.contains("admin") || user.contains("template") || user.contains("clause") || user.contains("playbook")) {
+            a = "Templates, the clause library and playbooks are managed under \"Administration\" [[hl:nav_admin]] "
+                + "(Configure section) and browsed via the Clause library [[hl:nav_clauses]] and Template library "
+                + "[[hl:nav_templates]]. Creating contracts from a template happens through \"New request\".";
+        } else if (user.contains("support") || user.contains("who") || user.contains("help") || user.contains("contact")) {
+            a = "For product questions, ask me here. For permission or access problems, contact a platform "
+                + "administrator (they manage users and access grants under Administration > Access "
+                + "[[hl:nav_access]]). Contract-specific questions go to your legal team owner shown on the "
+                + "contract record.";
+        } else {
+            a = "I can help you use the CLM platform: how to raise a contract request, track approvals and "
+                + "obligations, use the clause/template libraries, and how the contract lifecycle flows from "
+                + "intake to signature to renewal. I can explain but not edit records — make those changes on "
+                + "the relevant page. What would you like to know?";
+        }
+        return esc("(mock answer — set LLM_BASE_URL/LLM_API_KEY/LLM_MODEL in .env for the real assistant) " + a);
     }
 }

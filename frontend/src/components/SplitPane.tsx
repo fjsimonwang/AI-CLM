@@ -61,7 +61,8 @@ export function SplitPane({ left, right }: { left: React.ReactNode; right: React
   return (
     <div ref={colsRef} className="flex flex-col lg:flex-row gap-3 items-stretch">
       <div
-        className="min-w-0"
+        data-split="left"
+        className="min-w-0 max-lg:!flex-none"
         style={{ flex: frac, transition: "flex-grow 0.25s ease" }}
         onMouseDown={() => useSplitStore.getState().expand("left")}
         onMouseEnter={() => startHover("left")}
@@ -77,7 +78,8 @@ export function SplitPane({ left, right }: { left: React.ReactNode; right: React
         <div className="w-[3px] h-10 rounded-full bg-[color:var(--border)] hover:bg-[color:var(--accent)] transition-colors" />
       </div>
       <div
-        className="relative min-w-0"
+        data-split="right"
+        className="relative min-w-0 max-lg:!flex-none"
         style={{ flex: 1 - frac, transition: "flex-grow 0.25s ease" }}
         onMouseDown={() => useSplitStore.getState().expand("right")}
         onMouseEnter={() => startHover("right")}

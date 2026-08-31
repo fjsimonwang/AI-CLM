@@ -180,7 +180,7 @@ function AddRiskForm({
   return (
     <div className="rounded-[8px] border border-border p-3 mb-3 space-y-2 bg-surface-2">
       <input className="input" placeholder="Risk title" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>{c}</option>

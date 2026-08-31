@@ -38,6 +38,7 @@ public class ContractService {
     private final Repos.ContractRelations contractRelations;
     private final com.acme.clm.ai.AiService ai;
     private final WorkflowService workflow;
+    private final Repos.IntakeSessions intakeSessions;
 
     public ContractService(Repos.Contracts contracts, Repos.ContractTypes types, Repos.LegalEntities entities,
                            Repos.Users users, Repos.Parties parties, Repos.ContractParties contractParties,
@@ -48,7 +49,7 @@ public class ContractService {
                            AccessService access, AuditService audit,
                            Repos.CommentThreads commentThreads, Repos.CommentMessages commentMessages,
                            Repos.ContractRelations contractRelations, com.acme.clm.ai.AiService ai,
-                           WorkflowService workflow) {
+                           WorkflowService workflow, Repos.IntakeSessions intakeSessions) {
         this.contracts = contracts;
         this.types = types;
         this.entities = entities;
@@ -71,6 +72,7 @@ public class ContractService {
         this.contractRelations = contractRelations;
         this.ai = ai;
         this.workflow = workflow;
+        this.intakeSessions = intakeSessions;
     }
 
     public record CreateRequest(String contractTypeCode, String title, UUID contractingEntityId,
@@ -259,6 +261,8 @@ public class ContractService {
         m.put("owner", userName(c.ownerUserId));
         m.put("ownerUserId", c.ownerUserId);
         m.put("intakeSessionId", c.intakeSessionId);
+        m.put("requestNumber", c.intakeSessionId == null ? null
+                : intakeSessions.findById(c.intakeSessionId).map(s -> s.requestNumber).orElse(null));
         m.put("assignedLawyer", userName(c.assignedLawyerId));
         m.put("createdAt", c.createdAt);
 
