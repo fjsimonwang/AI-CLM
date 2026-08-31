@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "react-router-dom";
 import { api, apiBlob, money, date, usePerms, useAuth } from "../api";
-import { Card, SectionTitle, Badge, Spinner, Empty, Tabs, statusTone, riskTone, Confidence } from "../components/ui";
+import { Card, SectionTitle, Badge, Spinner, Empty, Tabs, statusTone, riskTone, Confidence, DecisionDialog } from "../components/ui";
 import { BriefingCard } from "../components/BriefingCard";
 import { Icon } from "../components/icons";
 import { DocumentPanel } from "../components/DocumentPanel";
@@ -56,6 +56,7 @@ export default function ContractDetail() {
       ? { to: "/approvals", label: "Approvals" }
       : { to: "/contracts", label: "Contracts" };
   const [tab, setTab] = useState("overview");
+  const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
@@ -138,9 +139,10 @@ export default function ContractDetail() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["contract", id] }),
   });
   const actOnTask = useMutation({
-    mutationFn: (p: { taskId: string; event: string }) =>
-      api(`/workflow/tasks/${p.taskId}/act`, { method: "POST", json: { event: p.event } }),
+    mutationFn: (p: { taskId: string; event: string; comment?: string }) =>
+      api(`/workflow/tasks/${p.taskId}/act`, { method: "POST", json: { event: p.event, comment: p.comment } }),
     onSuccess: () => {
+      setDecision(null);
       qc.invalidateQueries({ queryKey: ["wf", id] });
       qc.invalidateQueries({ queryKey: ["contract", id] });
       qc.invalidateQueries({ queryKey: ["contracts"] });
@@ -218,6 +220,16 @@ export default function ContractDetail() {
 
   return (
     <div className="space-y-4">
+      {decision && activeTask && (
+        <DecisionDialog
+          kind={decision}
+          contractNumber={d.contractNumber}
+          busy={actOnTask.isPending}
+          error={(actOnTask.error as any)?.message}
+          onCancel={() => setDecision(null)}
+          onConfirm={(note) => actOnTask.mutate({ taskId: activeTask.id, event: decision, comment: note })}
+        />
+      )}
       {justSubmitted && (
         <div
           className="confirm-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -360,7 +372,7 @@ export default function ContractDetail() {
               <button
                 className="btn btn-primary"
                 disabled={actOnTask.isPending}
-                onClick={() => actOnTask.mutate({ taskId: activeTask.id, event: "approve" })}
+                onClick={() => { actOnTask.reset(); setDecision("approve"); }}
               >
                 Approve
               </button>
@@ -370,7 +382,7 @@ export default function ContractDetail() {
                 className="btn"
                 style={{ borderColor: "var(--risk)", color: "var(--risk)" }}
                 disabled={actOnTask.isPending}
-                onClick={() => actOnTask.mutate({ taskId: activeTask.id, event: "reject" })}
+                onClick={() => { actOnTask.reset(); setDecision("reject"); }}
               >
                 Reject
               </button>
@@ -677,15 +689,33 @@ export default function ContractDetail() {
               </div>
               <div className="divide-y divide-border">
                 {(wf.data.tasks || []).map((t: any) => (
-                  <div key={t.id} className="py-2 text-sm flex items-center justify-between">
-                    <span>{t.state} · {t.type} · {t.assignee || "unassigned"}</span>
-                    <span className="text-ink-faint text-xs">
-                      {t.status} {t.outcome && `→ ${t.outcome}`} {t.overdue && <Badge tone="risk">overdue</Badge>}
-                    </span>
+                  <div key={t.id} className="py-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>{t.state} · {t.type} · {t.assignee || "unassigned"}</span>
+                      <span className="text-ink-faint text-xs whitespace-nowrap">
+                        {t.status} {t.outcome && `→ ${t.outcome}`}
+                        {t.completedAt && ` · ${date(t.completedAt)}`}
+                        {t.overdue && <Badge tone="risk">overdue</Badge>}
+                      </span>
+                    </div>
+                    {t.comments && (
+                      <div
+                        className="mt-1 text-xs text-ink-soft border-l-2 pl-2"
+                        style={{ borderColor: t.outcome === "reject" ? "var(--risk)" : "var(--border)" }}
+                      >
+                        <span className="text-ink-faint">
+                          {t.outcome === "reject" ? "Rejection reason" : "Comment"}:
+                        </span>{" "}
+                        {t.comments}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-ink-faint">Act on tasks from the Approvals screen.</p>
+              <p className="text-xs text-ink-faint">
+                Approve or reject from the header actions above (or the Approvals screen). A rejection
+                reason is required and is kept here on the workflow record.
+              </p>
             </div>
           )}
         </Card>
