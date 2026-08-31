@@ -71,13 +71,6 @@ public class ContractController {
         return service.updateStatus(id, body.get("status"), current.id());
     }
 
-    public record AgentCollabRequest(boolean enabled) {}
-
-    @PostMapping("/{id}/agent-collab")
-    public Map<String, Object> setAgentCollab(@PathVariable UUID id, @RequestBody AgentCollabRequest req) {
-        return service.setAgentCollab(id, req.enabled(), current.id());
-    }
-
     // ---- risk register ----
 
     @org.springframework.web.bind.annotation.GetMapping("/{id}/risks")

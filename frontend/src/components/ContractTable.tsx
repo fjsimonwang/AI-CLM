@@ -57,7 +57,7 @@ const COLUMNS: ColDef[] = [
   { key: "entity", label: "Entity", kind: "text", minWidth: 110, raw: (c) => c.entity, render: (c) => c.entity },
   {
     key: "status", label: "Status", kind: "select", minWidth: 130,
-    options: ["DRAFT", "IN_REVIEW", "EXECUTED", "CLOSED_REJECTED"],
+    options: ["DRAFT", "IN_REVIEW", "EXECUTED", "CLOSED_REJECTED", "CANCELLED"],
     raw: (c) => c.status,
     render: (c) => <Badge tone={statusTone(c.status)}>{c.status}</Badge>,
   },

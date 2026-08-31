@@ -203,7 +203,7 @@ export function DecisionDialog({
         </h2>
         <p className="text-sm text-ink-soft mt-2 leading-relaxed">
           {isReject
-            ? "This ends the approval workflow and closes the contract as rejected. Explain why — the requestor sees this note and it is kept on the workflow record."
+            ? "This ends your review and returns the request to the requestor as a draft carrying your reason, so they can revise and resubmit or close it. The reason is kept on the workflow record."
             : "This records your approval and advances the workflow to the next step."}
         </p>
         <label className="text-xs text-ink-faint mt-4 block">

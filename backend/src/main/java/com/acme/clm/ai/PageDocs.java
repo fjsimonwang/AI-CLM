@@ -102,9 +102,14 @@ public final class PageDocs {
             CONTRACT DETAIL (/contracts/{id}) — the full contract record. Keep in mind the ids are
             contract UUIDs, not numbers.
             Header: back link (to "Contracts", or "Approvals" when you opened the contract from an
-            approval task), title, contract number, status badge, risk badge, "migrated"
-            badge, parent-contract link; "Submit for approval" (DRAFT) or "Recall to draft" (IN_REVIEW)
-            buttons for users with EDIT_CONTRACT or the requestor. When the current workflow task is
+            approval task), title, contract number, status badge (DRAFT / IN_REVIEW / EXECUTED /
+            CLOSED_REJECTED / CANCELLED), risk badge, "migrated" badge, parent-contract link.
+            Requestor actions: on a plain DRAFT — "Submit for approval" and "Cancel request"
+            (→ CANCELLED); on a DRAFT that an approver rejected (shows a red "This request was
+            rejected" banner with the reason) — "Revise & resubmit" and "Close request"
+            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". Cancelled and closed contracts
+            are terminal — they can't be resubmitted and stop appearing in dashboard open items.
+            When the current workflow task is
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
             An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
@@ -116,9 +121,8 @@ public final class PageDocs {
             confidence); "Document" (document editor with Read/Edit toggle when EDIT_CONTRACT, autosave,
             "Re-assemble", "Open full", supporting documents with "Download", plus the "AI document
             review" panel — see below); "Discussion" (comment threads: "New thread", reply, resolve);
-            "Discussion" (comment threads: "New thread", reply, resolve; with a per-contract
-            "Agent collaboration" switch next to the tab label and a "✦ Ask agent" action on each
-            thread — see CROSS-CUTTING FEATURES / "Agent talk" below);
+            "Discussion" (comment threads: "New thread", reply, resolve; a "✦ Ask agent" action
+            shows on each thread when you have Agent talk on — see CROSS-CUTTING FEATURES below);
             "Workflow" (workflow name, current state badge, "Start workflow", task list showing each
             task's outcome, completion date and the approve/reject note — a rejection reason is
             highlighted); "Obligations" (table with Verify/Close and confidence);
@@ -273,12 +277,10 @@ public final class PageDocs {
             AGENT COLLABORATION / "AGENT TALK" — each participant on a contract can have a personal
             AI agent that takes part in that contract's Discussion threads, speaking AS that person
             (first person), grounded in the contract record.
-            - Global switch: the bot-icon toggle in the top header ("Agent collaboration" chip).
-              Off means your agent neither sends nor receives anything. Set it under your profile /
-              header at any time (PATCH /me/agent-setting).
-            - Per-contract switch: on a contract, the Discussion tab has a small violet switch next
-              to the tab label (visible to the contract owner, creator or general counsel). It must
-              be ON for any agent activity on that contract.
+            - The only switch: the bot-icon toggle in the top header ("Agent talk" chip). Off means
+              your agent neither sends nor receives anything; on, you can ask participants' agents
+              on any contract you can view (PATCH /me/agent-setting). There is no per-contract
+              switch.
             - Using it: open a Discussion thread on a contract and click "✦ Ask agent". Pick "Auto —
               best placed to answer" (the system routes the question to the participant whose role
               best fits — financial / legal / approval / general) or target a specific person's

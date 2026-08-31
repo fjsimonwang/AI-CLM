@@ -22,7 +22,16 @@ public class Contract {
     public String contractTypeCode;
 
     public String title;
+    /** DRAFT | IN_REVIEW | EXECUTED | CLOSED_REJECTED | CANCELLED */
     public String status = "DRAFT";
+
+    /**
+     * Set when an approver rejects the request: the contract returns to DRAFT and this holds the
+     * reason. Cleared when the requestor resubmits for approval. A DRAFT with a reason can be
+     * revised & resubmitted, or closed (CLOSED_REJECTED); a DRAFT without one can be cancelled.
+     */
+    @Column(name = "rejection_reason", columnDefinition = "text")
+    public String rejectionReason;
 
     @Column(name = "contracting_entity_id", nullable = false)
     public UUID contractingEntityId;
@@ -112,9 +121,6 @@ public class Contract {
 
     @Column(name = "editor_document_id")
     public String editorDocumentId;
-
-    @Column(name = "agent_collab_enabled", nullable = false)
-    public boolean agentCollabEnabled = false;
 
     @Column(name = "created_at")
     public Instant createdAt = Instant.now();

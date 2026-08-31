@@ -81,13 +81,13 @@ public class AgentChannelController {
 
     @GetMapping("/contracts/{contractId}/status")
     public Map<String, Object> status(@PathVariable UUID contractId) {
-        Contract c = loadVisible(contractId);
-        boolean contractEnabled = c.agentCollabEnabled;
+        loadVisible(contractId); // visibility check
+        boolean userOptIn = optIn(current.id());
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("contractEnabled", contractEnabled);
-        out.put("userOptIn", optIn(current.id()));
-        out.put("active", contractEnabled);
-        out.put("canToggleContract", canToggle(c));
+        out.put("userOptIn", userOptIn);
+        // Agent talk is governed solely by each user's personal opt-in (the header toggle).
+        // It is available on any contract you can view once you have turned it on.
+        out.put("active", userOptIn);
         return out;
     }
 
@@ -116,8 +116,8 @@ public class AgentChannelController {
     public Map<String, Object> ask(@PathVariable UUID contractId, @RequestBody AskRequest req) {
         UUID me = current.id();
         Contract c = loadVisible(contractId);
-        if (!c.agentCollabEnabled) {
-            throw new ApiExceptions.BadRequestException("Agent collaboration is disabled for this contract.");
+        if (!optIn(me)) {
+            throw new ApiExceptions.BadRequestException("Turn on Agent talk (header toggle) to ask a participant's agent.");
         }
         if (req.threadId() == null) throw new ApiExceptions.BadRequestException("threadId is required");
         CommentThread t = threads.findById(req.threadId())
@@ -192,7 +192,7 @@ public class AgentChannelController {
      * isn't held by LLM latency; failures are best-effort and never surface to the poster.
      */
     public void autoAnswerNewThread(Contract c, CommentThread t, UUID askerId, String question) {
-        if (!c.agentCollabEnabled || question == null || question.isBlank()) return;
+        if (!optIn(askerId) || question == null || question.isBlank()) return;
         if (autoInFlight.get() >= 8) return; // shed rather than queue unbounded — the human can still use "✦ Ask agent"
         autoAnswerExec.submit(() -> {
             autoInFlight.incrementAndGet();
@@ -209,7 +209,7 @@ public class AgentChannelController {
     private void runAutoAnswer(Contract c, CommentThread t, UUID askerId, String question) {
         // refresh the contract in this thread's persistence context
         Contract cc = contracts.findById(c.id).orElse(null);
-        if (cc == null || !cc.agentCollabEnabled) return;
+        if (cc == null || !optIn(askerId)) return;
         List<ParticipantAgent> reps = representatives(cc, question, askerId);
         if (reps.isEmpty()) return;
         String askerName = userName(askerId);
@@ -482,11 +482,6 @@ public class AgentChannelController {
         if (!access.canView(current.id(), c))
             throw new ApiExceptions.NotFoundException("Contract not found");
         return c;
-    }
-
-    private boolean canToggle(Contract c) {
-        UUID me = current.id();
-        return me != null && (me.equals(c.ownerUserId) || me.equals(c.createdBy) || access.seesEverything(me));
     }
 
     private boolean optIn(UUID userId) {
