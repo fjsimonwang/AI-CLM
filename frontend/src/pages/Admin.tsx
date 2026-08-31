@@ -226,6 +226,7 @@ export default function Admin() {
           title="Templates"
           listUrl="/templates"
           saveUrl="/admin/templates"
+          detailUrl="/templates"
           refs={[typeRef, entityRef, teamRef]}
           columns={[
             { key: "name", label: "Name" },
@@ -256,6 +257,7 @@ export default function Admin() {
           listUrl="/playbooks"
           saveUrl="/admin/playbooks"
           deleteUrl="/admin/playbooks"
+          detailUrl="/playbooks"
           refs={[typeRef, entityRef]}
           columns={[
             { key: "name", label: "Name" },
