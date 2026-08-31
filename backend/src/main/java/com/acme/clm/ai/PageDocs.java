@@ -97,7 +97,8 @@ public final class PageDocs {
         add("/contracts/:id", """
             CONTRACT DETAIL (/contracts/{id}) — the full contract record. Keep in mind the ids are
             contract UUIDs, not numbers.
-            Header: back link "Contracts", title, contract number, status badge, risk badge, "migrated"
+            Header: back link (to "Contracts", or "Approvals" when you opened the contract from an
+            approval task), title, contract number, status badge, risk badge, "migrated"
             badge, parent-contract link; "Submit for approval" (DRAFT) or "Recall to draft" (IN_REVIEW)
             buttons for users with EDIT_CONTRACT or the requestor.
             An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
@@ -134,9 +135,13 @@ public final class PageDocs {
             inquiry is active the list pane widens and an accent banner shows "Filtered by your AI
             inquiry" with "Show all" to clear.
             RIGHT: filter card ("All types", status, region, "Counterparty…" text, "Expiring ≤ 30/90/180
-            days") above the contract table (Contract number + title, Type, Counterparty, Entity,
-            Status badge, Value, Expiry with migrated badge, Risk badge). Numbers link to the detail
-            page.
+            days") above the contract table. The table has add/remove columns ("Columns (N)" button),
+            per-column sort (arrows in each header) and per-column filter menus (is / contains / before /
+            after / larger / smaller / is empty). Columns include Contract number + title, Type,
+            Counterparty, Entity, Status badge, Value, Expiry (with migrated badge), Risk badge,
+            "Last updated" (date + time of the most recent change to the contract — sortable and
+            filterable by before/after) and "Last updated by" (who made that change). Numbers link
+            to the detail page. Column choice, order and sort persist in the browser.
             """);
         add("/approvals", """
             APPROVALS (/approvals) — the approver workbench; needs the APPROVE permission.

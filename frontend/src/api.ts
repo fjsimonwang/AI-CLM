@@ -230,6 +230,15 @@ export function date(d: string | null | undefined) {
   return dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+export function dateTime(d: string | null | undefined) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return String(d);
+  return dt.toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
 export function fromNow(d: string | null | undefined) {
   if (!d) return "—";
   const dt = new Date(d).getTime();

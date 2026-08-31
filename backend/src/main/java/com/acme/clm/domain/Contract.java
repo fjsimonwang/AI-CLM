@@ -127,4 +127,10 @@ public class Contract {
 
     @Column(name = "updated_by")
     public UUID updatedBy;
+
+    /** Keep updated_at current on every persisted change, regardless of the call site. */
+    @PreUpdate
+    void touchUpdatedAt() {
+        updatedAt = Instant.now();
+    }
 }
