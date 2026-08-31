@@ -100,7 +100,9 @@ public final class PageDocs {
             Header: back link (to "Contracts", or "Approvals" when you opened the contract from an
             approval task), title, contract number, status badge, risk badge, "migrated"
             badge, parent-contract link; "Submit for approval" (DRAFT) or "Recall to draft" (IN_REVIEW)
-            buttons for users with EDIT_CONTRACT or the requestor.
+            buttons for users with EDIT_CONTRACT or the requestor. When the current workflow task is
+            assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
+            confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
             An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
             approver briefing).
             TABS: "Overview" (key-value terms: contracting entity, counterparties, governing law, value,
@@ -113,8 +115,9 @@ public final class PageDocs {
             "Discussion" (comment threads: "New thread", reply, resolve; with a per-contract
             "Agent collaboration" switch next to the tab label and a "✦ Ask agent" action on each
             thread — see CROSS-CUTTING FEATURES / "Agent talk" below);
-            "Workflow" (workflow name, current state badge, "Start workflow", task list — actions happen
-            on the Approvals page); "Obligations" (table with Verify/Close and confidence);
+            "Workflow" (workflow name, current state badge, "Start workflow", task list showing each
+            task's outcome, completion date and the approve/reject note — a rejection reason is
+            highlighted); "Obligations" (table with Verify/Close and confidence);
             "Relations" ("Detect with AI" button finds amendments/master/SOW links; AI suggestions await
             "Confirm"/"Dismiss" with confidence % and reasons; shows confirmed relations and the
             precedent basis); "Risks" (risk register: "Add risk", severity badges, "Dismiss"/"Resolve"/
@@ -149,8 +152,12 @@ public final class PageDocs {
             A stack of task cards; each shows contract number (link to the contract), state and type
             badges, "overdue" badge when past due, title, and a meta line "type · value · assigned ·
             due date". "Discuss" expands a comment thread per contract. Only the assignee sees
-            "Comment (optional)" and the action buttons (labels from the workflow, e.g. "approve",
-            "reject"); other viewers see "Actions are handled by the assigned user (name)".
+            the action buttons (labels from the workflow, e.g. "approve", "reject"); other viewers
+            see "Actions are handled by the assigned user (name)". Clicking "approve" or "reject"
+            opens a confirmation dialog with a note field — OPTIONAL for approve, REQUIRED for
+            reject (confirm stays disabled until a reason is typed). The note is saved on the
+            workflow task, appears in the contract's Workflow tab, and a rejection reason is shown
+            to the requestor.
             Each card has an "AI approver briefing" card (hover or click to expand; "Re-run" regenerates):
             summary, "What changed" vs the precedent/playbook, "Deviations from standard", "Decision
             requested".

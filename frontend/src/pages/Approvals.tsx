@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, money, date, useAuth } from "../api";
-import { Card, SectionTitle, Badge, Spinner, Empty } from "../components/ui";
+import { Card, SectionTitle, Badge, Spinner, Empty, DecisionDialog } from "../components/ui";
 import { CommentThreads } from "../components/CommentThreads";
 import { BriefingCard } from "../components/BriefingCard";
 import { Icon } from "../components/icons";
@@ -13,6 +13,9 @@ export default function Approvals() {
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const [brief, setBrief] = useState<Record<string, any>>({});
   const [comment, setComment] = useState<Record<string, string>>({});
+  const [decideFor, setDecideFor] = useState<
+    { taskId: string; kind: "approve" | "reject"; contractNumber: string } | null
+  >(null);
   const [discuss, setDiscuss] = useState<Record<string, boolean>>({});
   const [briefingFresh, setBriefingFresh] = useState<Record<string, boolean>>({});
 
@@ -33,7 +36,10 @@ export default function Approvals() {
   const act = useMutation({
     mutationFn: ({ taskId, event, comment }: { taskId: string; event: string; comment?: string }) =>
       api(`/workflow/tasks/${taskId}/act`, { method: "POST", json: { event, comment } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: () => {
+      setDecideFor(null);
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   const briefing = useMutation({
@@ -109,24 +115,40 @@ export default function Approvals() {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {t.assignedUserId && t.assignedUserId === user?.id ? (
                   <>
-                    <input
-                      className="input"
-                      style={{ maxWidth: 320 }}
-                      placeholder="Comment (optional)"
-                      value={comment[t.id] || ""}
-                      onChange={(e) => setComment((c) => ({ ...c, [t.id]: e.target.value }))}
-                    />
-                    {(t.availableEvents || []).map((ev: string) => (
-                      <button
-                        key={ev}
-                        className={`btn ${ev === "approve" ? "btn-primary" : ""}`}
-                        style={ev === "reject" ? { borderColor: "var(--risk)", color: "var(--risk)" } : {}}
-                        disabled={act.isPending}
-                        onClick={() => act.mutate({ taskId: t.id, event: ev, comment: comment[t.id] })}
-                      >
-                        {ev.replace(/_/g, " ")}
-                      </button>
-                    ))}
+                    {(t.availableEvents || []).some((ev: string) => ev !== "approve" && ev !== "reject") && (
+                      <input
+                        className="input"
+                        style={{ maxWidth: 320 }}
+                        placeholder="Comment (optional)"
+                        value={comment[t.id] || ""}
+                        onChange={(e) => setComment((c) => ({ ...c, [t.id]: e.target.value }))}
+                      />
+                    )}
+                    {(t.availableEvents || []).map((ev: string) =>
+                      ev === "approve" || ev === "reject" ? (
+                        <button
+                          key={ev}
+                          className={`btn ${ev === "approve" ? "btn-primary" : ""}`}
+                          style={ev === "reject" ? { borderColor: "var(--risk)", color: "var(--risk)" } : {}}
+                          disabled={act.isPending}
+                          onClick={() => {
+                            act.reset();
+                            setDecideFor({ taskId: t.id, kind: ev, contractNumber: t.contractNumber });
+                          }}
+                        >
+                          {ev}
+                        </button>
+                      ) : (
+                        <button
+                          key={ev}
+                          className="btn"
+                          disabled={act.isPending}
+                          onClick={() => act.mutate({ taskId: t.id, event: ev, comment: comment[t.id] })}
+                        >
+                          {ev.replace(/_/g, " ")}
+                        </button>
+                      ),
+                    )}
                   </>
                 ) : (
                   <span className="text-xs text-ink-faint">
@@ -134,7 +156,9 @@ export default function Approvals() {
                   </span>
                 )}
               </div>
-              {act.isError && <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{(act.error as any)?.message}</div>}
+              {act.isError && !decideFor && (
+                <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{(act.error as any)?.message}</div>
+              )}
 
               {discuss[t.id] && (
                 <div className="mt-4 pt-4 border-t border-border">
@@ -144,6 +168,17 @@ export default function Approvals() {
             </Card>
           ))}
         </div>
+      )}
+
+      {decideFor && (
+        <DecisionDialog
+          kind={decideFor.kind}
+          contractNumber={decideFor.contractNumber}
+          busy={act.isPending}
+          error={(act.error as any)?.message}
+          onCancel={() => setDecideFor(null)}
+          onConfirm={(note) => act.mutate({ taskId: decideFor.taskId, event: decideFor.kind, comment: note })}
+        />
       )}
     </div>
   );

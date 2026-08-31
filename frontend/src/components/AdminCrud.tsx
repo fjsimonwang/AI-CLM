@@ -24,6 +24,7 @@ export function AdminCrud({
   listUrl,
   saveUrl,
   deleteUrl,
+  detailUrl,
   idKey = "id",
   fields,
   columns,
@@ -35,6 +36,9 @@ export function AdminCrud({
   listUrl: string;
   saveUrl: string;
   deleteUrl?: string;
+  /** When set, editing an existing row fetches `${detailUrl}/${id}` first — needed for
+   *  fields the list projection omits (e.g. an uploaded `bodyHtml`). */
+  detailUrl?: string;
   idKey?: string;
   fields: FieldDef[];
   columns: { key: string; label: string }[];
@@ -54,6 +58,21 @@ export function AdminCrud({
   });
 
   const [editing, setEditing] = useState<any | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+
+  async function openEdit(row: any) {
+    const id = row[idKey];
+    if (!detailUrl || !id) { setEditing({ ...row }); return; }
+    setOpeningId(String(id));
+    try {
+      const full = await api(`${detailUrl}/${id}`);
+      setEditing({ ...row, ...full });
+    } catch {
+      setEditing({ ...row }); // fall back to the list row rather than blocking the edit
+    } finally {
+      setOpeningId(null);
+    }
+  }
   const save = useMutation({
     mutationFn: (body: any) => api(saveUrl, { method: "POST", json: body }),
     onSuccess: () => {
@@ -121,7 +140,8 @@ export function AdminCrud({
                     <button
                       className="btn"
                       style={{ padding: "0.25rem 0.5rem" }}
-                      onClick={() => setEditing({ ...row })}
+                      disabled={openingId === String(row[idKey])}
+                      onClick={() => openEdit(row)}
                     >
                       <Icon.edit width={13} height={13} />
                     </button>{" "}

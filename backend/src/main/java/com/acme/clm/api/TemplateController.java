@@ -65,6 +65,12 @@ public class TemplateController {
         m.put("id", t.id);
         m.put("name", t.name);
         m.put("contractType", t.contractTypeCode);
+        // code-keyed fields so the admin edit form can repopulate its selects/inputs
+        m.put("contractTypeCode", t.contractTypeCode);
+        m.put("legalEntityId", t.legalEntityId);
+        m.put("jurisdictionCode", t.jurisdictionCode);
+        m.put("languageCode", t.languageCode);
+        m.put("status", t.status);
         m.put("jurisdiction", t.jurisdictionCode);
         m.put("language", t.languageCode);
         m.put("description", t.description);

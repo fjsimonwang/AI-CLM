@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`card p-4 ${className}`}>{children}</div>;
@@ -164,6 +164,73 @@ export function Tabs({
           {t.extra}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Confirmation dialog for an approve/reject workflow decision. The reason is optional for
+ * "approve" and required for "reject"; the confirm button stays disabled until a reject
+ * reason is entered. The note is passed back to onConfirm and is stored on the workflow task.
+ */
+export function DecisionDialog({
+  kind,
+  contractNumber,
+  busy,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  kind: "approve" | "reject";
+  contractNumber?: string;
+  busy?: boolean;
+  error?: string;
+  onConfirm: (note: string) => void;
+  onCancel: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const isReject = kind === "reject";
+  const blocked = isReject && !note.trim();
+  return (
+    <div
+      className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(3px)" }}
+      onClick={onCancel}
+    >
+      <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-base font-medium">
+          {isReject ? "Reject" : "Approve"} {contractNumber ? <b>{contractNumber}</b> : "this contract"}?
+        </h2>
+        <p className="text-sm text-ink-soft mt-2 leading-relaxed">
+          {isReject
+            ? "This ends the approval workflow and closes the contract as rejected. Explain why — the requestor sees this note and it is kept on the workflow record."
+            : "This records your approval and advances the workflow to the next step."}
+        </p>
+        <label className="text-xs text-ink-faint mt-4 block">
+          {isReject ? "Reason for rejection" : "Comment (optional)"}
+          {isReject && <span style={{ color: "var(--risk)" }}> *</span>}
+        </label>
+        <textarea
+          className="input mt-1"
+          rows={3}
+          autoFocus
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={isReject ? "e.g. Liability cap exceeds policy; needs re-negotiation." : "Add context for the record…"}
+        />
+        {error && <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{error}</div>}
+        <div className="flex justify-end gap-2 mt-5">
+          <button className="btn" onClick={onCancel}>Go back</button>
+          <button
+            className="btn btn-primary"
+            style={isReject ? { background: "var(--risk)", borderColor: "var(--risk)" } : {}}
+            disabled={busy || blocked}
+            onClick={() => onConfirm(note.trim())}
+          >
+            {busy ? "Working…" : isReject ? "Reject contract" : "Approve"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

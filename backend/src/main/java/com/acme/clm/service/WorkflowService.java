@@ -107,6 +107,12 @@ public class WorkflowService {
         String target = transition.path("to").asText();
         JsonNode targetState = stateNode(d, target);
 
+        // A rejection must carry a reason — it is shown to the requestor and kept on the workflow task.
+        boolean isRejection = "reject".equals(event) || target.contains("reject");
+        if (isRejection && (comment == null || comment.isBlank())) {
+            throw new ApiExceptions.BadRequestException("A reason is required to reject.");
+        }
+
         // guards on the target state
         List<String> failed = evaluateGuards(targetState, wi.contractId, actor);
         if (!failed.isEmpty()) {
@@ -397,6 +403,7 @@ public class WorkflowService {
         m.put("dueAt", t.dueAt);
         m.put("createdAt", t.createdAt);
         m.put("outcome", t.outcome);
+        m.put("completedAt", t.completedAt);
         m.put("comments", t.comments);
         m.put("overdue", t.dueAt != null && t.dueAt.isBefore(Instant.now()) && "OPEN".equals(t.status));
         return m;
