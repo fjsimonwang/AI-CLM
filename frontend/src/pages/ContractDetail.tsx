@@ -166,13 +166,19 @@ function WorkflowProgress({
       <ol className="flex items-start">
         {steps.map((s, i) => {
           const last = i === steps.length - 1;
+          const prevDone = i > 0 && steps[i - 1].state === "done";
+          // the segment INTO this step is green once the previous step is done — so the green
+          // track reaches the active step, not just the last completed one
+          const leadInGreen = prevDone;
           const connectorDone = s.state === "done";
           return (
             <li key={s.key} className="flex-1 flex flex-col items-center text-center min-w-0">
               <div className="flex items-center w-full">
                 <span
                   className="h-[2px] flex-1 rounded"
-                  style={{ background: i === 0 ? "transparent" : "var(--border)" }}
+                  style={{
+                    background: i === 0 ? "transparent" : leadInGreen ? "var(--ok)" : "var(--border)",
+                  }}
                 />
                 <span
                   className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px]"
