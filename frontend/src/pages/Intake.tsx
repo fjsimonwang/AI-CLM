@@ -570,8 +570,18 @@ export default function Intake() {
         <Card>
           <SectionTitle>Draft ready for your review</SectionTitle>
           <p className="text-sm">
-            Created <b>{result.contractNumber}</b> as a draft. Review the document below, then submit it for approval.
+            {result.documentKept ? <>Updated <b>{result.contractNumber}</b>. </> : <>Created <b>{result.contractNumber}</b> as a draft. </>}
+            Review the document below, then submit it for approval.
           </p>
+          {result.documentKept && !result.paperMode && (
+            <div
+              className="rounded-[8px] p-3 text-xs leading-relaxed mt-2"
+              style={{ border: "1px solid var(--border)", background: "var(--surface-2)" }}
+            >
+              Your last edited version of the document has been kept — it was <b>not</b> re-assembled from the template.
+              Open the Document tab and use <b>Re-assemble</b> if you want to rebuild it from the current template and clauses.
+            </div>
+          )}
           {(result.clausesFromPrecedent || []).length > 0 && (
             <p className="text-xs text-ink-faint mt-1">
               Clauses carried from precedent: {result.clausesFromPrecedent.join(", ")}

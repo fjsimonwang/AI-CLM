@@ -494,12 +494,35 @@ public class IntakeService {
      */
     public Map<String, Object> submit(UUID sessionId, UUID userId, UUID precedentContractId,
                                       Map<String, Object> fieldOverrides) {
+        // A session that already produced a contract is a REVISION (the requester revising a
+        // returned/rejected request). In that case the document must be left exactly as it was
+        // last edited — we do NOT re-assemble it from the template here. The requester can still
+        // trigger a fresh assembly explicitly with the "Re-assemble" button on the contract.
+        boolean revising = sessions.findById(sessionId)
+                .map(x -> x.resultingContractId != null).orElse(false);
+
         UUID contractId = self.createContract(sessionId, userId, precedentContractId, fieldOverrides);
         IntakeSession sess = sessions.findById(sessionId).orElseThrow();
         sess.saved = true; // moving to the draft preview counts as an explicit save
         if (sess.requestNumber == null) sess.requestNumber = nextRequestNumber();
         sessions.save(sess);
         boolean paper = sess.paperBodyHtml != null && !sess.paperBodyHtml.isBlank();
+
+        if (revising) {
+            Contract c = contracts.findById(contractId).orElseThrow();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("contractId", contractId);
+            out.put("contractNumber", c.contractNumber);
+            out.put("status", c.status);
+            out.put("draftDeviations", List.of());
+            out.put("clausesFromPrecedent", List.of());
+            out.put("documentKept", true); // signals the UI that the last document version was retained
+            if ("MIGRATED".equals(c.source)) {
+                out.put("paperMode", true);
+                out.put("paperFilename", sess.paperFilename);
+            }
+            return out;
+        }
 
         List<Map<String, Object>> deviations = List.of();
         List<String> fromPrecedent = List.of();

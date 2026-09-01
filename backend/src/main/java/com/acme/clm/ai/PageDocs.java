@@ -73,7 +73,10 @@ public final class PageDocs {
             NEW REQUEST / INTAKE (/intake) — conversational contract intake. Two-column split pane.
             Arriving here via "Revise & resubmit" on a rejected request loads that request's saved
             session instead of a fresh one, with a red "Revising a returned request" banner showing
-            why it was sent back; edits + regenerate + resubmit update the same contract.
+            why it was sent back; edits + regenerate + resubmit update the same contract. On a
+            revision the document is NOT re-assembled from the template — the last edited version is
+            kept as-is; the review page says so, and the requester can rebuild it from the template
+            with "Re-assemble" on the contract's Document tab if they want to.
             LEFT: chat "New request — describe what you need in plain language". AI replies stream
             token by token. Under the latest AI question there are quick-answer chips ("Send N answers"
             composes them). Header buttons: "Save draft"/"Saved", "Drafts (N)" (opens a drafts drawer —
@@ -142,7 +145,9 @@ public final class PageDocs {
             via "add person"; "Hierarchy" child links);
             "Key terms" (table of extracted terms with source quote + provenance inherited/overrides +
             confidence); "Document" (document editor with Read/Edit toggle when EDIT_CONTRACT, autosave,
-            "Re-assemble", "Open full", supporting documents with "Download", plus the "AI document
+            "Re-assemble" — rebuilds the document from the current template + clauses, discarding manual
+            edits; this is the ONLY thing that regenerates the document, resubmitting a revised request
+            never does — "Open full", supporting documents with "Download", plus the "AI document
             review" panel — see below);
             "Workflow" (workflow name, current state badge, "Start workflow", task list showing each
             task's outcome, completion date and the approve/reject note — a rejection reason is
