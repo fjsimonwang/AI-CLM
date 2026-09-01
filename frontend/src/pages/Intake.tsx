@@ -1105,7 +1105,7 @@ export default function Intake() {
                     transform: showRecent ? "rotate(90deg)" : "none",
                   }}
                 />
-                …or start from one of your recent contracts
+                or start from one of your recent contracts
               </button>
               <div className={`unfold ${showRecent ? "unfold-open" : ""}`}>
                 <div>
@@ -1176,7 +1176,7 @@ export default function Intake() {
                 className={actionLinkCls}
               >
                 <Icon.upload width={12} height={12} />
-                …or, upload a 3rd-party paper contract
+                or, upload a 3rd-party paper contract
               </button>
             </div>
           )}
