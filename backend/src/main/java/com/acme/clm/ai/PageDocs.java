@@ -122,10 +122,11 @@ public final class PageDocs {
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
             An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
             approver briefing).
-            DISCUSSION PANEL: comment threads live in a FLOATING, DRAGGABLE panel (not a tab),
-            docked to the left by default with its top and height matching the tab-content area —
-            drag its header to move it anywhere, then "Dock" snaps it back; position and open/closed
-            state are remembered. "New thread" (just a message, no title), reply, resolve, and a
+            DISCUSSION PANEL: comment threads live in a DRAGGABLE panel (not a tab). By default it
+            is docked as a full-height left column right beside the tab content (sticky, so it
+            stays in view as you scroll). Drag its header to detach it into a free-floating box
+            anywhere on screen; a "Dock" button then snaps it back. Open/closed and any custom
+            position are remembered. "New thread" (just a message, no title), reply, resolve, and a
             "✦ Ask agent" action per thread when you have Agent talk on (see CROSS-CUTTING FEATURES
             below). An "×" hides the panel (a "Show discussion" button brings it back); a link with
             ?tab=discussion opens it. While participants' agents are working, an animated status
