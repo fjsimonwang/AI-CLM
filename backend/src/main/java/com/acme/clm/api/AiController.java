@@ -247,7 +247,7 @@ public class AiController {
         return out;
     }
 
-    /** Response when the user has turned their AI features (the "Agent talk" toggle) off. */
+    /** Response when the user has turned their AI features (the "Agent Crew" toggle) off. */
     private static Map<String, Object> aiOff() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("aiDisabled", true);

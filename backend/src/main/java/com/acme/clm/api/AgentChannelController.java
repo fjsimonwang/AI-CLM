@@ -100,7 +100,7 @@ public class AgentChannelController {
         boolean userOptIn = optIn(current.id());
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("userOptIn", userOptIn);
-        // Agent talk is governed solely by each user's personal opt-in (the header toggle).
+        // Agent Crew is governed solely by each user's personal opt-in (the header toggle).
         // It is available on any contract you can view once you have turned it on.
         out.put("active", userOptIn);
         out.put("busyThreads", agentBusyThreads.keySet().stream().map(UUID::toString).toList());
@@ -133,7 +133,7 @@ public class AgentChannelController {
         UUID me = current.id();
         Contract c = loadVisible(contractId);
         if (!optIn(me)) {
-            throw new ApiExceptions.BadRequestException("Turn on Agent talk (header toggle) to ask a participant's agent.");
+            throw new ApiExceptions.BadRequestException("Turn on Agent Crew (header toggle) to ask a participant's agent.");
         }
         if (req.threadId() == null) throw new ApiExceptions.BadRequestException("threadId is required");
         CommentThread t = threads.findById(req.threadId())

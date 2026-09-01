@@ -87,7 +87,7 @@ public class CommentController {
         addMessage(t.id, req.bodyHtml());
         audit.record(t.entityType, t.entityId, "COMMENT_THREAD_OPENED", current.id(), null,
                 Map.of("title", t.title));
-        // opening a thread IS the question: when the opener has Agent talk on, the best-placed
+        // opening a thread IS the question: when the opener has Agent Crew on, the best-placed
         // other participants' agents answer inline without an explicit "✦ Ask agent"
         // (autoAnswerNewThread re-checks the opt-in and bails if it is off)
         if ("CONTRACT".equals(t.entityType)) {

@@ -745,7 +745,7 @@ export default function ContractDetail() {
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">Summary</h2>
               {(summarize.data as any)?.aiDisabled ? (
-                <span className="text-xs text-ink-faint">AI off — enable Agent talk in the header</span>
+                <span className="text-xs text-ink-faint">AI off — enable Agent Crew in the header</span>
               ) : (
                 <button className="btn btn-ai" style={{ padding: "0.3rem 0.6rem" }} disabled={summarize.isPending} onClick={() => summarize.mutate()}>
                   <Icon.sparkle width={14} height={14} /> {summarize.isPending ? "Reviewing…" : storedBriefing ? "Regenerate AI briefing" : "Generate AI briefing"}

@@ -357,8 +357,8 @@ function AgentOptInChip() {
         disabled={q.isLoading || set.isPending}
         title={
           on
-            ? "AI is ON — AI insight, AI briefings and agent discussion. Click to review turning it off."
-            : "AI is OFF — no AI insight, briefings or agent discussion. Click to review turning it on."
+            ? "Agent Crew is ON — the advanced agent functions (AI insight, AI briefings, agent discussion) are running. Click to review turning it off."
+            : "Agent Crew is OFF — the advanced agent functions are disabled. Click to review turning it on."
         }
         onClick={() => setConfirm(true)}
       >
@@ -372,7 +372,7 @@ function AgentOptInChip() {
             style={{ transition: "transform 0.2s", transform: on ? "translateX(14px)" : "none" }}
           />
         </span>
-        <span className="hidden sm:inline">Agent&nbsp;talk</span>
+        <span className="hidden sm:inline">Agent&nbsp;Crew</span>
       </button>
 
       {confirm && createPortal(
@@ -382,9 +382,9 @@ function AgentOptInChip() {
           onClick={() => setConfirm(false)}
         >
           <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-medium">{on ? "Turn AI off?" : "Turn AI on?"}</h2>
+            <h2 className="text-base font-medium">{on ? "Turn Agent Crew off?" : "Turn Agent Crew on?"}</h2>
             <p className="text-sm text-ink-soft mt-2 leading-relaxed">
-              This one switch controls all of your working-alongside-you AI:
+              <b>Agent Crew</b> is the advanced agent functionality. This one switch controls all of it:
             </p>
             <ul className="text-sm text-ink-soft mt-1.5 list-disc pl-5 space-y-0.5">
               <li>the dashboard <b>AI insight</b></li>
@@ -393,8 +393,8 @@ function AgentOptInChip() {
             </ul>
             <p className="text-sm text-ink-soft mt-2">
               {on
-                ? "While off, none of these run for you and nothing is sent to the model on your behalf."
-                : "Turning it on lets these features generate content and your agent answer on your behalf."}
+                ? "While off, none of these advanced agent functions run for you and nothing is sent to the model on your behalf."
+                : "Turning it on enables these advanced agent functions — they can generate content and your agent can answer on your behalf."}
             </p>
             <div className="flex justify-end gap-2 mt-5">
               <button className="btn" onClick={() => setConfirm(false)}>Cancel</button>
@@ -404,7 +404,7 @@ function AgentOptInChip() {
                 disabled={set.isPending}
                 onClick={() => set.mutate(!on)}
               >
-                {set.isPending ? "Saving…" : on ? "Turn AI off" : "Turn AI on"}
+                {set.isPending ? "Saving…" : on ? "Turn Agent Crew off" : "Turn Agent Crew on"}
               </button>
             </div>
           </div>

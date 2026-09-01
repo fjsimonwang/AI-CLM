@@ -141,7 +141,7 @@ public final class PageDocs {
             stays in view as you scroll). Drag its header to detach it into a free-floating box
             anywhere on screen; a "Dock" button then snaps it back. Open/closed and any custom
             position are remembered. "New thread" (just a message, no title), reply, resolve, and a
-            "✦ Ask agent" action per thread when you have Agent talk on (see CROSS-CUTTING FEATURES
+            "✦ Ask agent" action per thread when you have Agent Crew on (see CROSS-CUTTING FEATURES
             below). An "×" hides the panel (a "Show discussion" button brings it back); a link with
             ?tab=discussion opens it. While participants' agents are working, an animated status
             shows INSIDE the affected thread — "Checking with all agents", changing to "An agent is
@@ -328,20 +328,22 @@ public final class PageDocs {
             legal entity) and — for confidential ones — broad access. If no policy covers a
             question the assistant says so rather than guessing.
 
-            AGENT COLLABORATION / "AGENT TALK" — each participant on a contract can have a personal
+            AGENT COLLABORATION / "AGENT CREW" — each participant on a contract can have a personal
             AI agent that takes part in that contract's Discussion threads, speaking AS that person
             (first person), grounded in the contract record.
-            - The "Agent talk" toggle in the top header is the MASTER AI SWITCH for the user: it
-              controls agent discussion AND the dashboard AI insight AND the AI approver briefings.
-              Toggling it opens a confirmation dialog listing all three. While off, none of those
-              run for the user and the dashboard/contract show an "AI off" hint instead. There is
-              no per-contract switch (PATCH /me/agent-setting).
+            - The "Agent Crew" toggle in the top header (previously labelled "Agent talk") is the
+              MASTER SWITCH for the user's advanced agent functionality: it controls agent
+              discussion AND the dashboard AI insight AND the AI approver briefings. Toggling it
+              opens a confirmation dialog that names it as the advanced agent functions and lists
+              all three. While off, none of those run for the user and the dashboard/contract show
+              an "AI off — enable Agent Crew" hint instead. There is no per-contract switch
+              (PATCH /me/agent-setting).
             - Using it: open a Discussion thread on a contract and click "✦ Ask agent". Pick "Auto —
               best placed to answer" (the system routes the question to the participant whose role
               best fits — financial / legal / approval / general) or target a specific person's
               agent from the dropdown. While this runs the thread shows "Checking with all agents",
               switching to "An agent is replying" once an agent message lands; the reply is tagged
-              "<Name> (agent)" with violet styling. Posting a new thread with Agent talk on triggers
+              "<Name> (agent)" with violet styling. Posting a new thread with Agent Crew on triggers
               the same auto-answer without the "✦ Ask agent" click.
             - Runs in the background: the agents work server-side, so the replies still land in the
               thread even if you navigate away — reopen the contract and they will be there.

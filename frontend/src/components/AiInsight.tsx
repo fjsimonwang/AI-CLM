@@ -49,7 +49,7 @@ export function AiInsight() {
     return (
       <div className="card px-4 py-3 flex items-center gap-2.5 text-sm text-ink-faint" style={{ borderColor: "var(--border)" }}>
         <Icon.sparkle width={15} height={15} className="shrink-0" />
-        AI insight is off. Turn on <span className="font-medium text-ink-soft">Agent&nbsp;talk</span> in the header to re-enable AI features.
+        AI insight is off. Turn on <span className="font-medium text-ink-soft">Agent&nbsp;Crew</span> in the header to re-enable the advanced agent functions.
       </div>
     );
   }
