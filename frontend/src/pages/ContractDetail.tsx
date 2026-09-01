@@ -58,7 +58,7 @@ const wfLabel = (key: string) =>
   key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
 
 type StepState = "done" | "current" | "todo" | "rejected";
-type ProgressStep = { key: string; label: string; state: StepState };
+type ProgressStep = { key: string; label: string; state: StepState; pending?: string };
 
 /**
  * Horizontal flow bar showing where the contract sits in its approval workflow.
@@ -93,12 +93,24 @@ function WorkflowProgress({
         .filter((t: any) => t.status !== "OPEN" && t.outcome && t.outcome !== "reject")
         .map((t: any) => t.state),
     );
+    const openTasks = (wf.tasks || []).filter((t: any) => t.status === "OPEN");
+    const pendingTask =
+      openTasks.find((t: any) => t.state === curKey) || openTasks[0] || null;
+    // who the current step is waiting on: the named individual, else the team/role
+    const pendingWho = pendingTask
+      ? pendingTask.assignee || pendingTask.roleLabel || null
+      : null;
     steps = order.map((s: any, i: number) => {
       let state: StepState = "todo";
       if (executed) state = "done";
       else if (s.key === curKey && wf.status === "RUNNING") state = "current";
       else if (doneStates.has(s.key) || (curIdx >= 0 && i < curIdx)) state = "done";
-      return { key: s.key, label: wfLabel(s.key), state };
+      return {
+        key: s.key,
+        label: wfLabel(s.key),
+        state,
+        pending: state === "current" && pendingWho ? pendingWho : undefined,
+      };
     });
   } else {
     const returned = contractStatus === "DRAFT" && !!rejectionReason;
@@ -203,6 +215,11 @@ function WorkflowProgress({
               {s.state === "current" && (
                 <span className="text-[11px] mt-0.5" style={{ color: "var(--accent)" }}>
                   In progress
+                </span>
+              )}
+              {s.pending && (
+                <span className="text-[11px] mt-0.5 text-ink-soft leading-tight">
+                  Pending: {s.pending}
                 </span>
               )}
             </li>

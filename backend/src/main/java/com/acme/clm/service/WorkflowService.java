@@ -272,6 +272,20 @@ public class WorkflowService {
         return fired;
     }
 
+    /** Human-readable name for a workflow assignment role expression (the team/role a task sits with). */
+    static String roleLabel(String role) {
+        return switch (role == null ? "" : role) {
+            case "owner" -> "Contract owner";
+            case "signatory" -> "Authorised signatory";
+            case "owner_manager" -> "Owner's manager";
+            case "legal_team" -> "Legal team";
+            case "legal_manager" -> "Legal manager";
+            case "finance_approver" -> "Finance approver";
+            case "" -> "Assignee";
+            default -> Character.toUpperCase(role.charAt(0)) + role.substring(1).replace('_', ' ');
+        };
+    }
+
     private UUID resolveRole(String role, Contract c) {
         return switch (role) {
             case "owner", "signatory" -> c.ownerUserId != null ? c.ownerUserId : anyGc();
@@ -420,6 +434,7 @@ public class WorkflowService {
         m.put("type", t.taskType);
         m.put("status", t.status);
         m.put("role", t.assignedRoleExpression);
+        m.put("roleLabel", roleLabel(t.assignedRoleExpression));
         m.put("assignedUserId", t.assignedUserId);
         m.put("assignee", t.assignedUserId == null ? null
                 : users.findById(t.assignedUserId).map(u -> u.displayName).orElse(null));
