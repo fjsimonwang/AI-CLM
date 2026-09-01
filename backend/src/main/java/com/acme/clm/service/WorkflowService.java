@@ -358,9 +358,14 @@ public class WorkflowService {
             JsonNode d = Json.read(wfDef.definition);
             List<Map<String, Object>> states = new ArrayList<>();
             for (JsonNode s : d.path("states")) {
-                states.add(Map.of("key", s.path("key").asText(), "type", s.path("type").asText("task")));
+                Map<String, Object> st = new LinkedHashMap<>();
+                st.put("key", s.path("key").asText());
+                st.put("type", s.path("type").asText("task"));
+                if (s.hasNonNull("taskType")) st.put("taskType", s.path("taskType").asText());
+                states.add(st);
             }
             m.put("states", states);
+            m.put("workflowName", d.path("name").asText(wfDef.name));
         }
         return m;
     }

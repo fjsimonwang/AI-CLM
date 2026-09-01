@@ -127,7 +127,14 @@ public final class PageDocs {
             When the current workflow task is
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
-            An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
+            FLOW PROGRESS BAR: directly under the header, above the "AI summary & briefing" card, a
+            horizontal step bar shows where the contract is. When an approval workflow is running it
+            shows that workflow's own steps (e.g. Manager approval → Signature → Executed, or the
+            Legal review chain) with the current step marked "In progress", finished steps ticked,
+            and the live contract status badge. With no workflow yet it shows the generic lifecycle
+            (Draft → In review → Executed); a returned/rejected, cancelled or closed request is
+            called out on the bar too.
+            An "AI summary & briefing" card sits under it (collapsible; can regenerate the
             approver briefing).
             DISCUSSION PANEL: comment threads live in a DRAGGABLE panel (not a tab). By default it
             is docked as a full-height left column right beside the tab content (sticky, so it

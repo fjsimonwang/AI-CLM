@@ -43,6 +43,184 @@ const renderSummaryWithSession = (summary: string, sessionId: string) => {
   );
 };
 
+const WF_STATE_LABELS: Record<string, string> = {
+  owner_approval: "Manager approval",
+  legal_review: "Legal review",
+  drafting: "Requestor revision",
+  finance_review: "Finance approval",
+  finance_approval: "Finance approval",
+  signature: "Signature",
+  executed: "Executed",
+  closed_rejected: "Rejected",
+};
+const wfLabel = (key: string) =>
+  WF_STATE_LABELS[key] ||
+  key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+type StepState = "done" | "current" | "todo" | "rejected";
+type ProgressStep = { key: string; label: string; state: StepState };
+
+/**
+ * Horizontal flow bar showing where the contract sits in its approval workflow.
+ * When a workflow instance is running (or completed) it renders that workflow's
+ * own states; otherwise it falls back to the generic Draft → In review → Executed
+ * lifecycle keyed off the contract status.
+ */
+function WorkflowProgress({
+  wf,
+  contractStatus,
+  rejectionReason,
+}: {
+  wf: any;
+  contractStatus: string;
+  rejectionReason?: string | null;
+}) {
+  const started = !!wf?.started && Array.isArray(wf?.states) && wf.states.length > 0;
+
+  let title = "Contract lifecycle";
+  let steps: ProgressStep[] = [];
+  let note: { text: string; tone: "risk" | "muted" } | null = null;
+
+  if (started) {
+    title = wf.workflowName || "Approval workflow";
+    const order = wf.states.filter((s: any) => s.key !== "closed_rejected");
+    const curKey: string = wf.currentState;
+    const curIdx = order.findIndex((s: any) => s.key === curKey);
+    const completed = wf.status === "COMPLETED";
+    const executed = completed && curKey === "executed";
+    const doneStates = new Set(
+      (wf.tasks || [])
+        .filter((t: any) => t.status !== "OPEN" && t.outcome && t.outcome !== "reject")
+        .map((t: any) => t.state),
+    );
+    steps = order.map((s: any, i: number) => {
+      let state: StepState = "todo";
+      if (executed) state = "done";
+      else if (s.key === curKey && wf.status === "RUNNING") state = "current";
+      else if (doneStates.has(s.key) || (curIdx >= 0 && i < curIdx)) state = "done";
+      return { key: s.key, label: wfLabel(s.key), state };
+    });
+  } else {
+    const returned = contractStatus === "DRAFT" && !!rejectionReason;
+    if (contractStatus === "CANCELLED") {
+      steps = [
+        { key: "draft", label: "Draft", state: "done" },
+        { key: "cancelled", label: "Cancelled", state: "rejected" },
+      ];
+      note = { text: "This request was cancelled by the requestor.", tone: "muted" };
+    } else if (contractStatus === "CLOSED_REJECTED") {
+      steps = [
+        { key: "draft", label: "Draft", state: "done" },
+        { key: "review", label: "In review", state: "rejected" },
+        { key: "closed", label: "Closed", state: "todo" },
+      ];
+      note = { text: "Rejected in approval and closed by the requestor.", tone: "risk" };
+    } else {
+      const idx = contractStatus === "EXECUTED" ? 2 : contractStatus === "IN_REVIEW" ? 1 : 0;
+      steps = [
+        { key: "draft", label: "Draft" },
+        { key: "review", label: "In review" },
+        { key: "executed", label: "Executed" },
+      ].map((s, i) => ({
+        ...s,
+        state: (idx === 2 ? "done" : i < idx ? "done" : i === idx ? "current" : "todo") as StepState,
+      }));
+      if (returned)
+        note = {
+          text: "Returned to the requestor after rejection — revise & resubmit or close it out.",
+          tone: "risk",
+        };
+    }
+  }
+
+  const statusLabel =
+    contractStatus === "IN_REVIEW"
+      ? "In review"
+      : contractStatus.charAt(0) + contractStatus.slice(1).toLowerCase().replace(/_/g, " ");
+
+  return (
+    <Card className="fade-in">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <span className="text-sm font-medium text-ink-soft uppercase tracking-wide">{title}</span>
+        <Badge tone={statusTone(contractStatus)}>{statusLabel}</Badge>
+      </div>
+      <ol className="flex items-start">
+        {steps.map((s, i) => {
+          const last = i === steps.length - 1;
+          const connectorDone = s.state === "done";
+          return (
+            <li key={s.key} className="flex-1 flex flex-col items-center text-center min-w-0">
+              <div className="flex items-center w-full">
+                <span
+                  className="h-[2px] flex-1 rounded"
+                  style={{ background: i === 0 ? "transparent" : "var(--border)" }}
+                />
+                <span
+                  className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px]"
+                  style={
+                    s.state === "done"
+                      ? { background: "var(--ok)", color: "#fff" }
+                      : s.state === "current"
+                        ? { border: "2px solid var(--accent)", background: "var(--surface)" }
+                        : s.state === "rejected"
+                          ? { background: "var(--risk)", color: "#fff" }
+                          : { border: "2px solid var(--border)", background: "var(--surface)" }
+                  }
+                >
+                  {s.state === "done" ? (
+                    <svg viewBox="0 0 12 12" width={11} height={11}>
+                      <path
+                        d="M2.5 6.5 L5 9 L9.5 3.5"
+                        fill="none"
+                        stroke="#fff"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : s.state === "rejected" ? (
+                    "✕"
+                  ) : s.state === "current" ? (
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />
+                  ) : (
+                    <span className="text-ink-faint">{i + 1}</span>
+                  )}
+                </span>
+                <span
+                  className="h-[2px] flex-1 rounded"
+                  style={{
+                    background: last ? "transparent" : connectorDone ? "var(--ok)" : "var(--border)",
+                  }}
+                />
+              </div>
+              <span
+                className={`mt-1.5 text-xs leading-tight px-1 ${
+                  s.state === "todo" ? "text-ink-faint" : "text-ink"
+                }`}
+              >
+                {s.label}
+              </span>
+              {s.state === "current" && (
+                <span className="text-[11px] mt-0.5" style={{ color: "var(--accent)" }}>
+                  In progress
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {note && (
+        <p
+          className="text-xs mt-3"
+          style={{ color: note.tone === "risk" ? "var(--risk)" : "var(--ink-faint)" }}
+        >
+          {note.text}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export default function ContractDetail() {
   const { id } = useParams();
   const location = useLocation();
@@ -541,6 +719,12 @@ export default function ContractDetail() {
           )}
         </div>
       )}
+
+      <WorkflowProgress
+        wf={wfData}
+        contractStatus={d.status}
+        rejectionReason={d.rejectionReason}
+      />
 
       <Card className="!p-0 overflow-hidden">
         <button
