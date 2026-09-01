@@ -111,8 +111,9 @@ public final class PageDocs {
             badge (DRAFT / IN_REVIEW / EXECUTED / CLOSED_REJECTED / CANCELLED), risk badge,
             "migrated" badge, parent-contract link.
             Requestor actions: on a plain DRAFT — "Submit for approval" and "Cancel request"
-            (→ CANCELLED); on a DRAFT that an approver rejected (shows a red "This request was
-            rejected" banner with the reason) — "Revise & resubmit" and "Close request"
+            (→ CANCELLED); on a DRAFT that an approver rejected (shows a red rejection banner with
+            the reason — "returned to you" for the requestor, "returned to the requestor" for
+            anyone else viewing it) — "Revise & resubmit" and "Close request"
             (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". "Revise & resubmit" reopens the
             request's intake session and takes you to the New request page with the conversation
             and form loaded, so you can edit the details and resubmit — it updates the SAME

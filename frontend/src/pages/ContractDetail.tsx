@@ -528,7 +528,11 @@ export default function ContractDetail() {
           className="rounded-lg border p-3 text-sm"
           style={{ borderColor: "var(--risk)", background: "color-mix(in srgb, var(--risk) 8%, transparent)" }}
         >
-          <div className="font-medium" style={{ color: "var(--risk)" }}>This request was rejected and returned to you</div>
+          <div className="font-medium" style={{ color: "var(--risk)" }}>
+            {isRequestor
+              ? "This request was rejected and returned to you"
+              : "This request was rejected and returned to the requestor"}
+          </div>
           <div className="text-ink-soft mt-1">{d.rejectionReason}</div>
           {isRequestor && (
             <div className="text-xs text-ink-faint mt-1.5">
