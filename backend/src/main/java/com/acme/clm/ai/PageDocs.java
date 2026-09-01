@@ -104,9 +104,10 @@ public final class PageDocs {
         add("/contracts/:id", """
             CONTRACT DETAIL (/contracts/{id}) — the full contract record. Keep in mind the ids are
             contract UUIDs, not numbers.
-            Header: back link (to "Contracts", or "Approvals" when you opened the contract from an
-            approval task), title, contract number, status badge (DRAFT / IN_REVIEW / EXECUTED /
-            CLOSED_REJECTED / CANCELLED), risk badge, "migrated" badge, parent-contract link.
+            Header: a "Back" link that returns to the previous page you were on (falls back to the
+            Contracts list if you opened the contract directly), title, contract number, status
+            badge (DRAFT / IN_REVIEW / EXECUTED / CLOSED_REJECTED / CANCELLED), risk badge,
+            "migrated" badge, parent-contract link.
             Requestor actions: on a plain DRAFT — "Submit for approval" and "Cancel request"
             (→ CANCELLED); on a DRAFT that an approver rejected (shows a red "This request was
             rejected" banner with the reason) — "Revise & resubmit" and "Close request"

@@ -74,7 +74,7 @@ export default function Approvals() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Link to={`/contracts/${t.contractId}`} state={{ from: "approvals" }} className="link font-medium">{t.contractNumber}</Link>
+                    <Link to={`/contracts/${t.contractId}`} className="link font-medium">{t.contractNumber}</Link>
                     <Badge tone="accent">{t.currentState}</Badge>
                     <Badge tone="neutral">{t.type}</Badge>
                     {t.overdue && <Badge tone="risk">overdue</Badge>}
