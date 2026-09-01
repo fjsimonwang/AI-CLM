@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, usePerms } from "../api";
-import { Card, SectionTitle, Badge, Spinner, Empty, riskTone } from "./ui";
+import { Card, Badge, Spinner, Empty, riskTone } from "./ui";
 import { Icon } from "./icons";
 import { useHighlight } from "./highlight";
 import { useDocEdited } from "./docEdited";
@@ -17,6 +17,7 @@ export function AiReviewPanel({ contractId }: { contractId: string }) {
   const canClose = canPlaybook;
   const [selected, setSelected] = useState<string[]>([]);
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState(false);
 
   const rules = useQuery({ queryKey: ["review-rules"], queryFn: () => api("/ai/review-rules") });
 
@@ -97,28 +98,47 @@ export function AiReviewPanel({ contractId }: { contractId: string }) {
 
   return (
     <Card>
-      <SectionTitle
-        right={
-          <button
-            className="btn btn-ai"
-            style={{ padding: "0.35rem 0.7rem" }}
-            disabled={running || start.isPending || selectedRules.length === 0}
-            onClick={() => start.mutate()}
-          >
-            <Icon.sparkle width={14} height={14} />
-            {running
-              ? "Reviewing in background…"
-              : start.isPending
-                ? "Starting…"
-                : everRan && hasResult
-                  ? "Re-run AI review"
-                  : "Run AI review"}
-          </button>
-        }
-      >
-        AI document review
-      </SectionTitle>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex items-center gap-1.5 min-w-0"
+          aria-expanded={!collapsed}
+        >
+          <Icon.chevronDown
+            width={15}
+            height={15}
+            style={{ transition: "transform 0.2s", transform: collapsed ? "rotate(-90deg)" : "none" }}
+          />
+          <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI document review</h2>
+          {collapsed && hasResult && !running && (
+            <Badge tone={critical > 0 ? "risk" : findings.length ? "warn" : "ok"}>
+              {findings.length
+                ? `${findings.length} finding${findings.length > 1 ? "s" : ""}${critical > 0 ? ` · ${critical} critical` : ""}`
+                : "no issues"}
+            </Badge>
+          )}
+          {collapsed && running && <Badge tone="ai">reviewing…</Badge>}
+        </button>
+        <button
+          className="btn btn-ai shrink-0"
+          style={{ padding: "0.35rem 0.7rem" }}
+          disabled={running || start.isPending || selectedRules.length === 0}
+          onClick={() => { setCollapsed(false); start.mutate(); }}
+        >
+          <Icon.sparkle width={14} height={14} />
+          {running
+            ? "Reviewing in background…"
+            : start.isPending
+              ? "Starting…"
+              : everRan && hasResult
+                ? "Re-run AI review"
+                : "Run AI review"}
+        </button>
+      </div>
 
+      {collapsed ? null : (
+      <>
       <p className="text-xs text-ink-faint mb-2">
         A critical review of the current draft against the admin-defined rule checklist and playbooks.
         Runs in the background — you can leave this page and come back; every AI finding is also
@@ -297,6 +317,8 @@ export function AiReviewPanel({ contractId }: { contractId: string }) {
         <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>
           {(start.error as any).message}
         </div>
+      )}
+      </>
       )}
     </Card>
   );

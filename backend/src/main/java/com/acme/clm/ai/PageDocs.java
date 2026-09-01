@@ -168,7 +168,9 @@ public final class PageDocs {
             AI review & submit gate: "Submit for approval" first runs/syncs an "AI quick check" (modal
             listing findings by severity; still allows "Submit anyway"). In the Document tab the review
             panel lets you pick checked rules and optional playbooks, re-runs, links findings' quotes
-            into the document, and offers Dismiss/Resolve.
+            into the document, and offers Dismiss/Resolve. The "AI document review" panel is
+            collapsible — click its title to fold it; when folded it still shows a badge with the
+            finding count (or "reviewing…").
             """);
         add("/contracts", """
             CONTRACTS LIST (/contracts) — the contract register with an AI inquiry pane.
