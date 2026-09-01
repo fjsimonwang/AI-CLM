@@ -69,6 +69,9 @@ public final class PageDocs {
             """);
         add("/intake", """
             NEW REQUEST / INTAKE (/intake) — conversational contract intake. Two-column split pane.
+            Arriving here via "Revise & resubmit" on a rejected request loads that request's saved
+            session instead of a fresh one, with a red "Revising a returned request" banner showing
+            why it was sent back; edits + regenerate + resubmit update the same contract.
             LEFT: chat "New request — describe what you need in plain language". AI replies stream
             token by token. Under the latest AI question there are quick-answer chips ("Send N answers"
             composes them). Header buttons: "Save draft"/"Saved", "Drafts (N)" (opens a drafts drawer —
@@ -107,22 +110,31 @@ public final class PageDocs {
             Requestor actions: on a plain DRAFT — "Submit for approval" and "Cancel request"
             (→ CANCELLED); on a DRAFT that an approver rejected (shows a red "This request was
             rejected" banner with the reason) — "Revise & resubmit" and "Close request"
-            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". Cancelled and closed contracts
-            are terminal — they can't be resubmitted and stop appearing in dashboard open items.
+            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". "Revise & resubmit" reopens the
+            request's intake session and takes you to the New request page with the conversation
+            and form loaded, so you can edit the details and resubmit — it updates the SAME
+            contract (keeps its number, bumps a draft version), it does not create a new one.
+            "Cancel request", "Close request" and "Recall to draft" each ask for confirmation.
+            Cancelled and closed contracts are terminal — they can't be resubmitted and stop
+            appearing in dashboard open items.
             When the current workflow task is
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
             An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
             approver briefing).
-            TABS: "Overview" (key-value terms: contracting entity, counterparties, governing law, value,
-            dates, owner, liability; grouped "Deal terms"; "Clauses used" with tier badges; "People with
-            access" — add/remove participants via "add person"; "Hierarchy" child links);
+            DISCUSSION SIDE PANEL: comment threads live in a panel pinned to the LEFT of the tabbed
+            content (not a tab), always visible alongside whatever tab is open — "New thread",
+            reply, resolve, and a "✦ Ask agent" action per thread when you have Agent talk on (see
+            CROSS-CUTTING FEATURES below). An "×" hides the panel (a "Show discussion" button brings
+            it back; the choice is remembered); a link with ?tab=discussion opens it.
+            TABS (to the right of the discussion panel): "Overview" (key-value terms: contracting
+            entity, counterparties, governing law, value, dates, owner, liability; grouped "Deal
+            terms"; "Clauses used" with tier badges; "People with access" — add/remove participants
+            via "add person"; "Hierarchy" child links);
             "Key terms" (table of extracted terms with source quote + provenance inherited/overrides +
             confidence); "Document" (document editor with Read/Edit toggle when EDIT_CONTRACT, autosave,
             "Re-assemble", "Open full", supporting documents with "Download", plus the "AI document
-            review" panel — see below); "Discussion" (comment threads: "New thread", reply, resolve);
-            "Discussion" (comment threads: "New thread", reply, resolve; a "✦ Ask agent" action
-            shows on each thread when you have Agent talk on — see CROSS-CUTTING FEATURES below);
+            review" panel — see below);
             "Workflow" (workflow name, current state badge, "Start workflow", task list showing each
             task's outcome, completion date and the approve/reject note — a rejection reason is
             highlighted); "Obligations" (table with Verify/Close and confidence);

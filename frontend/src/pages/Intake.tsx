@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, apiForm, apiBlob, apiStream, apiText } from "../api";
 import { Card, SectionTitle, Badge, Spinner, Empty } from "../components/ui";
@@ -60,6 +60,7 @@ function groupFields(spec: Field[]): [string, Field[]][] {
 
 export default function Intake() {
   const nav = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [session, setSession] = useState<any>(null);
@@ -72,6 +73,7 @@ export default function Intake() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<any>(null);
+  const [reviseReason, setReviseReason] = useState(""); // set when resuming a rejected request to revise
   const [draft, setDraft] = useState<Record<string, any>>({}); // local edits pending save
   const draftRef = useRef<Record<string, any>>({});            // always-fresh copy for async saves
   const [saving, setSaving] = useState(false);
@@ -206,6 +208,7 @@ export default function Intake() {
     setStreamText("");
     setStatus("");
     setSubmitError("");
+    setReviseReason("");
   };
 
   // flush unsaved field edits before switching sessions so nothing typed is lost
@@ -298,6 +301,20 @@ export default function Intake() {
   useEffect(() => {
     if (bootedRef.current) return; // StrictMode double-invoke would create a stray session
     bootedRef.current = true;
+    // arriving from "Revise & resubmit": reopen that request's session instead of a fresh one
+    const reviseId = (location.state as any)?.reviseSessionId;
+    if (reviseId) {
+      setReviseReason((location.state as any)?.reviseReason || "");
+      nav(location.pathname, { replace: true, state: {} }); // don't re-trigger on back/refresh
+      api(`/intake/sessions/${reviseId}`).then((s) => {
+        setSessionId(s.id);
+        setSession(s);
+        setMessages(s.conversation || []);
+        sessionsQ.refetch();
+        useSplitStore.getState().expand("left");
+      }).catch((e: any) => setSubmitError(e.message || String(e)));
+      return;
+    }
     api("/intake/sessions", { method: "POST" }).then((s) => {
       setSessionId(s.id);
       setSession(s);
@@ -764,6 +781,16 @@ export default function Intake() {
           </button>
           </div>
         </div>
+        {session?.resultingContractId && (
+          <div
+            className="px-4 py-2 border-b text-xs"
+            style={{ borderColor: "var(--risk)", background: "color-mix(in srgb, var(--risk) 8%, transparent)" }}
+          >
+            <span className="font-medium" style={{ color: "var(--risk)" }}>Revising a returned request.</span>{" "}
+            {reviseReason ? <span className="text-ink-soft">Reason it was sent back: {reviseReason}</span> : null}
+            <span className="text-ink-faint"> Update the details on the right, then generate and resubmit — it updates the same request.</span>
+          </div>
+        )}
         {showDrafts && (
           <div className="px-4 py-2 border-b border-border bg-surface-2 max-h-56 overflow-y-auto space-y-1">
             {(() => {

@@ -507,6 +507,76 @@ public class ContractService {
         return get(c.id);
     }
 
+    /**
+     * Re-apply an intake session's captured fields onto an EXISTING draft contract — used when a
+     * requester revises and resubmits a request that an approver returned to them. Keeps the
+     * contract number, history and workflow lineage; refreshes the editable fields and bumps a
+     * draft version. The document is re-assembled by the caller afterwards.
+     */
+    @Transactional
+    public Map<String, Object> updateFromIntake(UUID contractId, CreateRequest req, UUID actor) {
+        Contract c = contracts.findById(contractId)
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("Contract not found"));
+        if (!"DRAFT".equals(c.status)) {
+            throw new ApiExceptions.BadRequestException("Only a draft contract can be revised.");
+        }
+        LegalEntity entity = entities.findById(req.contractingEntityId())
+                .orElseThrow(() -> new ApiExceptions.BadRequestException("Unknown contracting entity"));
+
+        if (req.title() != null && !req.title().isBlank()) c.title = req.title();
+        c.contractingEntityId = entity.id;
+        if (req.governingLawCode() != null && !req.governingLawCode().isBlank()) c.governingLawCode = req.governingLawCode();
+
+        Map<String, Object> attrs = req.typeAttributes() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(req.typeAttributes());
+        attrs.values().removeIf(Objects::isNull);
+        if (req.termMonths() != null) attrs.putIfAbsent("term_months", req.termMonths());
+        c.typeAttributes = Json.write(attrs);
+        c.updatedBy = actor;
+        contracts.save(c);
+
+        if (req.termMonths() != null) {
+            terms.findByContractId(contractId).stream()
+                    .filter(t -> "term_months".equals(t.termKey))
+                    .forEach(terms::delete);
+            ContractTerm t = new ContractTerm();
+            t.contractId = contractId;
+            t.termKey = "term_months";
+            t.termValue = Json.write(req.termMonths());
+            t.termType = "NUMBER";
+            t.effectiveFrom = LocalDate.now();
+            terms.save(t);
+        }
+
+        if (req.participantUserIds() != null) {
+            for (String uidStr : req.participantUserIds()) {
+                try {
+                    UUID uid = UUID.fromString(uidStr);
+                    if (uid.equals(actor)) continue;
+                    if (participants.findById(new ContractParticipant.Key(contractId, uid)).isPresent()) continue;
+                    ContractParticipant pp = new ContractParticipant();
+                    pp.contractId = contractId;
+                    pp.userId = uid;
+                    pp.role = "VIEWER";
+                    pp.addedBy = actor;
+                    participants.save(pp);
+                } catch (Exception ignored) { }
+            }
+        }
+
+        int next = versions.findByContractIdOrderByVersionNoDesc(contractId).stream()
+                .mapToInt(v -> v.versionNo).max().orElse(1) + 1;
+        ContractVersion v = new ContractVersion();
+        v.contractId = contractId;
+        v.versionNo = next;
+        v.versionLabel = "Draft v" + next;
+        v.changeSummary = "Revised by requester after rejection";
+        v.createdBy = actor;
+        versions.save(v);
+
+        audit.record("CONTRACT", contractId.toString(), "REVISED", actor, null, Map.of("version", next));
+        return get(contractId);
+    }
+
     @Transactional(readOnly = true)
     public String counterpartyName(UUID contractId) {
         return contractParties.findByContractId(contractId).stream()

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { api, apiBlob, money, date, usePerms, useAuth } from "../api";
 import { Card, SectionTitle, Badge, Spinner, Empty, Tabs, statusTone, riskTone, Confidence, DecisionDialog } from "../components/ui";
 import { BriefingCard } from "../components/BriefingCard";
@@ -46,6 +46,7 @@ const renderSummaryWithSession = (summary: string, sessionId: string) => {
 export default function ContractDetail() {
   const { id } = useParams();
   const location = useLocation();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const can = usePerms();
   const [justSubmitted, setJustSubmitted] = useState(() => !!(location.state as any)?.justSubmitted);
@@ -55,11 +56,20 @@ export default function ContractDetail() {
     (location.state as any)?.from === "approvals"
       ? { to: "/approvals", label: "Approvals" }
       : { to: "/contracts", label: "Contracts" };
-  const validTabs = ["overview", "terms", "document", "discussion", "workflow", "obligations", "relations", "risks", "audit"];
+  const validTabs = ["overview", "terms", "document", "workflow", "obligations", "relations", "risks", "audit"];
   const initialTab = new URLSearchParams(location.search).get("tab");
   const [tab, setTab] = useState(initialTab && validTabs.includes(initialTab) ? initialTab : "overview");
+  // Discussion lives in a persistent left side panel, not a tab. `?tab=discussion` opens it.
+  const [discussionOpen, setDiscussionOpen] = useState(() => {
+    if (initialTab === "discussion") return true;
+    try { return localStorage.getItem("clm-contract-discussion") !== "0"; } catch { return true; }
+  });
+  const toggleDiscussion = (v: boolean) => {
+    setDiscussionOpen(v);
+    try { localStorage.setItem("clm-contract-discussion", v ? "1" : "0"); } catch { /* ignore */ }
+  };
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
-  const [lifecycle, setLifecycle] = useState<null | "cancel" | "close">(null);
+  const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
@@ -131,6 +141,13 @@ export default function ContractDetail() {
       qc.invalidateQueries({ queryKey: ["contracts"] });
       qc.invalidateQueries({ queryKey: ["me-summary"] });
     },
+  });
+  const revise = useMutation({
+    mutationFn: () => api(`/intake/revise/${id}`, { method: "POST" }),
+    onSuccess: (s: any) =>
+      nav("/intake", {
+        state: { reviseSessionId: s.id, reviseContractId: id, reviseReason: (c.data as any)?.rejectionReason },
+      }),
   });
   const actOnTask = useMutation({
     mutationFn: (p: { taskId: string; event: string; comment?: string }) =>
@@ -232,11 +249,13 @@ export default function ContractDetail() {
         >
           <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-medium">
-              {lifecycle === "close" ? "Close" : "Cancel"} <b>{d.contractNumber}</b>?
+              {lifecycle === "close" ? "Close" : lifecycle === "recall" ? "Recall" : "Cancel"} <b>{d.contractNumber}</b>?
             </h2>
             <p className="text-sm text-ink-soft mt-2 leading-relaxed">
               {lifecycle === "close"
                 ? "This closes the rejected request for good. It stays on record as closed but no longer needs action and can't be resubmitted."
+                : lifecycle === "recall"
+                ? "This pulls the request out of approval and back to draft. The current approval task is cancelled; you can edit and resubmit when ready."
                 : "This abandons the draft request. It stays on record as cancelled and can't be resubmitted."}
             </p>
             {(setStatus.error as any)?.message && (
@@ -246,11 +265,21 @@ export default function ContractDetail() {
               <button className="btn" onClick={() => setLifecycle(null)}>Go back</button>
               <button
                 className="btn btn-primary"
-                style={{ background: "var(--risk)", borderColor: "var(--risk)" }}
+                style={lifecycle === "recall" ? {} : { background: "var(--risk)", borderColor: "var(--risk)" }}
                 disabled={setStatus.isPending}
-                onClick={() => setStatus.mutate(lifecycle === "close" ? "CLOSED_REJECTED" : "CANCELLED")}
+                onClick={() =>
+                  setStatus.mutate(
+                    lifecycle === "close" ? "CLOSED_REJECTED" : lifecycle === "recall" ? "DRAFT" : "CANCELLED",
+                  )
+                }
               >
-                {setStatus.isPending ? "Working…" : lifecycle === "close" ? "Close request" : "Cancel request"}
+                {setStatus.isPending
+                  ? "Working…"
+                  : lifecycle === "close"
+                  ? "Close request"
+                  : lifecycle === "recall"
+                  ? "Recall to draft"
+                  : "Cancel request"}
               </button>
             </div>
           </div>
@@ -380,7 +409,12 @@ export default function ContractDetail() {
         </div>
         {isRequestor && (
           <div className="flex gap-2 shrink-0 flex-wrap justify-end">
-            {d.status === "DRAFT" && (
+            {d.status === "DRAFT" && d.rejectionReason && d.intakeSessionId && (
+              <button className="btn btn-primary" disabled={revise.isPending} onClick={() => revise.mutate()}>
+                {revise.isPending ? "Opening…" : "Revise & resubmit"}
+              </button>
+            )}
+            {d.status === "DRAFT" && !(d.rejectionReason && d.intakeSessionId) && (
               <button className="btn btn-primary" disabled={checking || startWf.isPending} onClick={beginSubmit}>
                 {d.rejectionReason ? "Revise & resubmit" : "Submit for approval"}
               </button>
@@ -405,7 +439,11 @@ export default function ContractDetail() {
               </button>
             )}
             {d.status === "IN_REVIEW" && (
-              <button className="btn" disabled={setStatus.isPending} onClick={() => setStatus.mutate("DRAFT")}>
+              <button
+                className="btn"
+                disabled={setStatus.isPending}
+                onClick={() => { setStatus.reset(); setLifecycle("recall"); }}
+              >
                 Recall to draft
               </button>
             )}
@@ -498,27 +536,63 @@ export default function ContractDetail() {
         )}
       </Card>
 
-      <Tabs
-        tabs={[
-          { key: "overview", label: "Overview" },
-          { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
-          { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
-          { key: "discussion", label: "Discussion", count: d.discussionCount ?? 0 },
-          { key: "workflow", label: "Workflow" },
-          { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
-          { key: "relations", label: "Relations", count:
-              (relations.data?.relations?.length ?? 0)
-              + (d.parentContractId ? 1 : 0)
-              + (d.children || []).length },
-          { key: "risks", label: "Risks", count: (risks.data || []).filter((r: any) => r.status === "OPEN").length },
-          { key: "audit", label: "Audit trail" },
-        ]}
-        active={tab}
-        onChange={(t) => {
-          setTab(t);
-          setRecordOpen(false);
-        }}
-      />
+      <div className="lg:flex lg:gap-4 lg:items-start">
+        <aside
+          className={`order-last lg:order-first mt-4 lg:mt-0 lg:sticky lg:top-4 ${
+            discussionOpen ? "lg:w-[350px] lg:shrink-0" : "hidden"
+          }`}
+        >
+          <Card className="!p-0 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+              <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5">
+                <Icon.message width={14} height={14} /> Discussion
+                {d.discussionCount ? <span className="text-ink-faint">({d.discussionCount})</span> : null}
+              </span>
+              <button
+                className="btn !p-1 !border-0"
+                title="Hide discussion panel"
+                onClick={() => toggleDiscussion(false)}
+              >
+                <Icon.x width={14} height={14} />
+              </button>
+            </div>
+            <div className="p-3 lg:max-h-[calc(100vh-200px)] overflow-y-auto">
+              <CommentThreads entityType="CONTRACT" entityId={id!} />
+            </div>
+          </Card>
+        </aside>
+
+        <div className="min-w-0 lg:flex-1 space-y-4">
+          {!discussionOpen && (
+            <button
+              className="btn"
+              style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+              onClick={() => toggleDiscussion(true)}
+            >
+              <Icon.message width={13} height={13} /> Show discussion
+              {d.discussionCount ? ` (${d.discussionCount})` : ""}
+            </button>
+          )}
+          <Tabs
+            tabs={[
+              { key: "overview", label: "Overview" },
+              { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
+              { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
+              { key: "workflow", label: "Workflow" },
+              { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
+              { key: "relations", label: "Relations", count:
+                  (relations.data?.relations?.length ?? 0)
+                  + (d.parentContractId ? 1 : 0)
+                  + (d.children || []).length },
+              { key: "risks", label: "Risks", count: (risks.data || []).filter((r: any) => r.status === "OPEN").length },
+              { key: "audit", label: "Audit trail" },
+            ]}
+            active={tab}
+            onChange={(t) => {
+              setTab(t);
+              setRecordOpen(false);
+            }}
+          />
 
       {tab === "overview" && (
         <div className="space-y-4 fade-in">
@@ -678,12 +752,6 @@ export default function ContractDetail() {
           </div>
           <div className="min-w-0 lg:h-full lg:overflow-y-auto"><AiReviewPanel contractId={id!} /></div>
         </div>
-        </div>
-      )}
-
-      {tab === "discussion" && (
-        <div className="fade-in">
-          <CommentThreads entityType="CONTRACT" entityId={id!} />
         </div>
       )}
 
@@ -963,6 +1031,8 @@ export default function ContractDetail() {
           )}
         </Card>
       )}
+        </div>
+      </div>
 
       {(checking || qcError || quickCheck) && (
         <div className="fixed inset-0 z-50 grid place-items-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>

@@ -28,6 +28,12 @@ public class IntakeController {
     @PostMapping("/sessions")
     public Map<String, Object> create() { return service.create(current.id()); }
 
+    /** Reopen the intake session behind a rejected contract so the requester can revise & resubmit. */
+    @PostMapping("/revise/{contractId}")
+    public Map<String, Object> revise(@PathVariable UUID contractId) {
+        return service.reopenForRevision(contractId, current.id());
+    }
+
     @GetMapping("/sessions")
     public Object listMine() { return service.listMine(current.id()); }
 
