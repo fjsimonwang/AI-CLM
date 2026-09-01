@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, useAuth } from "../api";
 import { Spinner, Empty, Badge } from "./ui";
@@ -21,17 +21,19 @@ export function CommentThreads({ entityType, entityId }: {
 }) {
   const qc = useQueryClient();
   const key = ["comments", entityType, entityId];
-  // when set (just-posted thread + agents on): poll for the agents' autonomous replies
-  const [agentPollUntil, setAgentPollUntil] = useState(0);
+  const agentMsgCount = (list: any[]) =>
+    (list || []).reduce((n, t) => n + (t.messages || []).filter((m: any) => m.channel === "AGENT").length, 0);
+  // after posting a thread / asking with agents on: poll for the agents' autonomous replies.
+  // `base` is the agent-message count when polling began, so we can tell "still checking" from
+  // "an agent has started replying".
+  const [agentPoll, setAgentPoll] = useState<{ until: number; base: number } | null>(null);
   const q = useQuery({
     queryKey: key,
     queryFn: () => api(`/comments/${entityType}/${entityId}`),
-    // while agents may still be drafting replies to a just-posted thread, keep polling
-    refetchInterval: agentPollUntil > Date.now() ? 5000 : false,
+    refetchInterval: agentPoll && agentPoll.until > Date.now() ? 3500 : false,
   });
 
   const [newBody, setNewBody] = useState("");
-  const [newTitle, setNewTitle] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [composerKey, setComposerKey] = useState(0);
   const [replyFor, setReplyFor] = useState<string | null>(null);
@@ -41,6 +43,7 @@ export function CommentThreads({ entityType, entityId }: {
   const [agentQuestion, setAgentQuestion] = useState("");
   const [agentTarget, setAgentTarget] = useState("");
   const [agentKey, setAgentKey] = useState(0);
+  const [askPhase, setAskPhase] = useState<0 | 1>(0); // 0 = "checking with agents", 1 = "agent replying"
   const [foldOpen, setFoldOpen] = useState<Record<string, boolean>>({});
 
   // "✦ Ask agent" is available when the current user has Agent talk on (header toggle);
@@ -66,17 +69,16 @@ export function CommentThreads({ entityType, entityId }: {
     mutationFn: () =>
       api("/comments/threads", {
         method: "POST",
-        json: { entityType, entityId, title: newTitle, bodyHtml: newBody },
+        json: { entityType, entityId, bodyHtml: newBody },
       }),
     onSuccess: () => {
       setNewBody("");
-      setNewTitle("");
       setShowNew(false);
       setComposerKey((k) => k + 1);
       invalidate();
-      // with agent collaboration on, participants' agents answer the new thread on their own —
+      // with Agent talk on, participants' agents answer the new thread on their own —
       // poll until roughly the longest an agent exchange can take to land
-      if (agentAsk) setAgentPollUntil(Date.now() + 100_000);
+      if (agentAsk) setAgentPoll({ until: Date.now() + 100_000, base: agentMsgCount(q.data || []) });
     },
   });
   const reply = useMutation({
@@ -97,6 +99,8 @@ export function CommentThreads({ entityType, entityId }: {
       setAgentFor(null);
       setAgentKey((k) => k + 1);
       invalidate();
+      // the two agents may keep going a couple of turns — keep polling briefly
+      setAgentPoll({ until: Date.now() + 45_000, base: agentMsgCount(q.data || []) });
     },
   });
   const resolve = useMutation({
@@ -106,6 +110,30 @@ export function CommentThreads({ entityType, entityId }: {
   });
 
   const threads = q.data || [];
+
+  // Agent activity indicator: "Checking with all agents" until an agent message lands, then
+  // "An agent is replying". Driven by the poll started on post / ask, plus a synchronous
+  // "ask" that is still in flight.
+  const polling = !!agentPoll && agentPoll.until > Date.now();
+  const agentActive = polling || askAgent.isPending;
+  const agentReplying =
+    (polling && agentMsgCount(threads) > (agentPoll?.base ?? 0)) || askPhase === 1;
+
+  useEffect(() => {
+    if (!agentActive) { if (askPhase !== 0) setAskPhase(0); return; }
+    if (askPhase === 0) {
+      const t = window.setTimeout(() => setAskPhase(1), 3000);
+      return () => window.clearTimeout(t);
+    }
+  }, [agentActive, askPhase]);
+
+  const AgentStatus = agentActive ? (
+    <div className="flex items-center gap-2 text-xs font-medium text-violet-600 dark:text-violet-400 pop-in">
+      <Icon.bot width={13} height={13} />
+      {agentReplying ? "An agent is replying" : "Checking with all agents"}
+      <span className="agent-dots"><span /><span /><span /></span>
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-4">
@@ -118,14 +146,10 @@ export function CommentThreads({ entityType, entityId }: {
         )}
       </div>
 
+      {AgentStatus}
+
       {showNew && (
         <div className="card p-3 space-y-2 pop-in">
-          <input
-            className="input"
-            placeholder="Thread title (e.g. “Liability cap”)"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-          />
           <RichText key={composerKey} placeholder="Start the discussion…" onChange={setNewBody} />
           {entityType === "CONTRACT" && agentAsk && (
             <div className="text-xs text-violet-600 dark:text-violet-400 flex items-center gap-1">
@@ -171,7 +195,6 @@ export function CommentThreads({ entityType, entityId }: {
                         <Icon.chevronDown width={14} height={14} />
                       </button>
                     )}
-                    <span className={"font-medium text-sm" + (resolved ? " text-ink-soft" : "")}>{t.title}</span>
                     {resolved ? (
                       <Badge tone="ok">resolved</Badge>
                     ) : (
@@ -274,9 +297,11 @@ export function CommentThreads({ entityType, entityId }: {
                     <button
                       className="btn btn-primary"
                       disabled={askAgent.isPending || !agentQuestion.trim() || t.status === "RESOLVED"}
-                      onClick={() => askAgent.mutate({ threadId: t.id, question: agentQuestion, targetUserId: agentTarget || undefined })}
+                      onClick={() => { setAskPhase(0); askAgent.mutate({ threadId: t.id, question: agentQuestion, targetUserId: agentTarget || undefined }); }}
                     >
-                      {askAgent.isPending ? "Agents are talking…" : "Ask"}
+                      {askAgent.isPending
+                        ? askPhase === 1 ? "An agent is replying…" : "Checking with all agents…"
+                        : "Ask"}
                     </button>
                   </div>
                 </div>

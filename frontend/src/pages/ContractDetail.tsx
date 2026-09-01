@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { api, apiBlob, money, date, usePerms, useAuth } from "../api";
@@ -536,63 +536,43 @@ export default function ContractDetail() {
         )}
       </Card>
 
-      <div className="lg:flex lg:gap-4 lg:items-start">
-        <aside
-          className={`order-last lg:order-first mt-4 lg:mt-0 lg:sticky lg:top-4 ${
-            discussionOpen ? "lg:w-[350px] lg:shrink-0" : "hidden"
-          }`}
+      {discussionOpen ? (
+        <FloatingDiscussion
+          entityId={id!}
+          count={d.discussionCount}
+          onClose={() => toggleDiscussion(false)}
+        />
+      ) : (
+        <button
+          className="btn"
+          style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+          onClick={() => toggleDiscussion(true)}
         >
-          <Card className="!p-0 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-              <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5">
-                <Icon.message width={14} height={14} /> Discussion
-                {d.discussionCount ? <span className="text-ink-faint">({d.discussionCount})</span> : null}
-              </span>
-              <button
-                className="btn !p-1 !border-0"
-                title="Hide discussion panel"
-                onClick={() => toggleDiscussion(false)}
-              >
-                <Icon.x width={14} height={14} />
-              </button>
-            </div>
-            <div className="p-3 lg:max-h-[calc(100vh-200px)] overflow-y-auto">
-              <CommentThreads entityType="CONTRACT" entityId={id!} />
-            </div>
-          </Card>
-        </aside>
+          <Icon.message width={13} height={13} /> Show discussion
+          {d.discussionCount ? ` (${d.discussionCount})` : ""}
+        </button>
+      )}
 
-        <div className="min-w-0 lg:flex-1 space-y-4">
-          {!discussionOpen && (
-            <button
-              className="btn"
-              style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
-              onClick={() => toggleDiscussion(true)}
-            >
-              <Icon.message width={13} height={13} /> Show discussion
-              {d.discussionCount ? ` (${d.discussionCount})` : ""}
-            </button>
-          )}
-          <Tabs
-            tabs={[
-              { key: "overview", label: "Overview" },
-              { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
-              { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
-              { key: "workflow", label: "Workflow" },
-              { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
-              { key: "relations", label: "Relations", count:
-                  (relations.data?.relations?.length ?? 0)
-                  + (d.parentContractId ? 1 : 0)
-                  + (d.children || []).length },
-              { key: "risks", label: "Risks", count: (risks.data || []).filter((r: any) => r.status === "OPEN").length },
-              { key: "audit", label: "Audit trail" },
-            ]}
-            active={tab}
-            onChange={(t) => {
-              setTab(t);
-              setRecordOpen(false);
-            }}
-          />
+      <Tabs
+        tabs={[
+          { key: "overview", label: "Overview" },
+          { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
+          { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
+          { key: "workflow", label: "Workflow" },
+          { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
+          { key: "relations", label: "Relations", count:
+              (relations.data?.relations?.length ?? 0)
+              + (d.parentContractId ? 1 : 0)
+              + (d.children || []).length },
+          { key: "risks", label: "Risks", count: (risks.data || []).filter((r: any) => r.status === "OPEN").length },
+          { key: "audit", label: "Audit trail" },
+        ]}
+        active={tab}
+        onChange={(t) => {
+          setTab(t);
+          setRecordOpen(false);
+        }}
+      />
 
       {tab === "overview" && (
         <div className="space-y-4 fade-in">
@@ -1031,8 +1011,6 @@ export default function ContractDetail() {
           )}
         </Card>
       )}
-        </div>
-      </div>
 
       {(checking || qcError || quickCheck) && (
         <div className="fixed inset-0 z-50 grid place-items-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
@@ -1104,6 +1082,80 @@ export default function ContractDetail() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Floating, draggable discussion panel. Defaults to a full-height panel docked to the left edge;
+ * drag its header to move it anywhere. Position and open/closed state persist per browser.
+ */
+function FloatingDiscussion({
+  entityId,
+  count,
+  onClose,
+}: {
+  entityId: string;
+  count?: number;
+  onClose: () => void;
+}) {
+  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("clm-discussion-pos") || "");
+      if (s && typeof s.x === "number" && typeof s.y === "number") return s;
+    } catch { /* first use */ }
+    return { x: 0, y: 76 };
+  });
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+
+  function onDragStart(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest("button")) return; // let the close button work
+    e.preventDefault();
+    dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
+    document.body.style.userSelect = "none";
+    const move = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const x = Math.max(0, Math.min(window.innerWidth - 300, ev.clientX - dragRef.current.dx));
+      const y = Math.max(8, Math.min(window.innerHeight - 240, ev.clientY - dragRef.current.dy));
+      setPos({ x, y });
+    };
+    const up = () => {
+      dragRef.current = null;
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      setPos((p) => {
+        try { localStorage.setItem("clm-discussion-pos", JSON.stringify(p)); } catch { /* ignore */ }
+        return p;
+      });
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
+  return (
+    <div
+      className="fixed z-40 w-[360px] max-w-[92vw] flex flex-col rounded-xl border border-border bg-surface shadow-2xl"
+      style={{ left: pos.x, top: pos.y, height: `calc(100vh - ${pos.y + 16}px)` }}
+    >
+      <div
+        className="flex items-center justify-between px-3 py-2 border-b border-border cursor-move select-none rounded-t-xl"
+        style={{ background: "var(--surface-2)" }}
+        onMouseDown={onDragStart}
+        title="Drag to move"
+      >
+        <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5">
+          <span aria-hidden className="tracking-[0.15em] text-ink-faint leading-none">⠿</span>
+          <Icon.message width={14} height={14} /> Discussion
+          {count ? <span className="text-ink-faint">({count})</span> : null}
+        </span>
+        <button className="btn !p-1 !border-0" title="Hide discussion panel" onClick={onClose}>
+          <Icon.x width={14} height={14} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        <CommentThreads entityType="CONTRACT" entityId={entityId} />
+      </div>
     </div>
   );
 }
