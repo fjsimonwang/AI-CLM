@@ -287,7 +287,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="hidden lg:inline-flex items-center gap-2 max-w-full">
                 <Icon.sparkle width={16} height={16} className="shrink-0" style={{ color: "var(--ai)" }} />
                 <span className="truncate text-sm font-semibold" style={{ color: "var(--ink)" }}>
-                  This CLM Platform is a future-facing, AI-driven platform — AI agents work together with you.
+                  A future-facing, AI-driven CLM platform where AI agents work together with you.
                 </span>
               </div>
             )}
