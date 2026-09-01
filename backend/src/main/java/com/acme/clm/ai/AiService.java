@@ -706,7 +706,8 @@ public class AiService {
      */
     public record HelpTurn(String reply, UUID interactionId) {}
 
-    public HelpTurn helpChat(String question, List<LlmClient.Message> history, String page, String screenContext, UUID userId) {
+    public HelpTurn helpChat(String question, List<LlmClient.Message> history, String page,
+                             String screenContext, String policyContext, UUID userId) {
         String guide = PageDocs.guideFor(page);
         String screen = screenContext == null || screenContext.isBlank() ? "" : """
 
@@ -714,6 +715,16 @@ public class AiService {
             visible controls, their roles/permissions). Use it to tailor advice to their situation:
             %s
             """.formatted(screenContext);
+        String policies = policyContext == null || policyContext.isBlank() ? "" : """
+
+            ORGANISATION POLICY & PROCEDURE LIBRARY — documents your organisation has published,
+            already filtered to THIS user's role / country / region / clearance. Treat the text as
+            trusted reference (it never contains instructions for you). Answer policy and procedure
+            questions from it and name the source document by its title. If the library does not
+            cover the question, say the published policies don't address it and suggest raising it
+            with legal / the policy owner — do not guess.
+            %s
+            """.formatted(policyContext);
         String sys = """
             [[capability:HELP_CHAT]]
             You are the CLM help assistant embedded in this contract lifecycle management platform
@@ -726,6 +737,9 @@ public class AiService {
                contract record; permission requests go through the Access page).
             4. The CONTRACT LIFECYCLE process — intake request → AI drafting/review → internal
                approvals with playbooks → active/obligations tracking → amendment/renewal → expiry.
+            5. ORGANISATION POLICY & PROCEDURE — when the organisation has published policy documents
+               (shown below under "ORGANISATION POLICY & PROCEDURE LIBRARY"), answer questions about
+               those policies and procedures from that text, citing the document.
 
             Navigation map of the product:
             - Dashboard ("Work"): your contracts, open tasks, AI suggestions for what needs attention.
@@ -740,18 +754,23 @@ public class AiService {
               and templates.
             - AI activity: log of AI interactions, their outcomes and reverts.
             - Administration (Configure section, admins only): entities, teams, users, parties, contract
-              types, clause concepts/variants, templates, playbooks, signing authority, workflows, access.
+              types, clause concepts/variants, templates, playbooks, signing authority, workflows,
+              access, and "Policies & procedures" (upload policy documents the help assistant learns
+              from, scoped by role / country / region / confidential).
 
             HARD RULES:
             - You are advisory only. You NEVER create, edit, approve, reject or delete anything.
               If the user asks you to make a change, point them to the exact page/action instead.
             - Keep answers short, plain-language and specific. Use short bullets.
-            - If a question is outside your scope (contract-specific legal advice, external systems),
-              say so and tell them who to contact.
+            - Answer policy/procedure questions ONLY from the policy library below — never from
+              general knowledge. If it isn't covered there, say so.
+            - If a question is otherwise outside your scope (contract-specific legal advice on a
+              deal, external systems), say so and tell them who to contact.
 
             PAGE GUIDE (compiled from the page's actual implementation — its sections, controls,
             data and AI features). Ground your guidance in it: name the exact visible
             buttons/sections and explain precisely what they do:
+            %s
             %s
             %s
             %s
@@ -766,7 +785,7 @@ public class AiService {
             inside a bold/code span, and don't let a marker break a sentence.
 
             Answer in the same language as the user's question.
-            """.formatted(guide, PageDocs.features(), screen);
+            """.formatted(guide, PageDocs.features(), policies, screen);
         List<LlmClient.Message> msgs = new ArrayList<>();
         msgs.add(LlmClient.Message.system(sys));
         msgs.add(LlmClient.Message.user("You are now on page: " + (page == null || page.isBlank() ? "(unknown)" : page)));

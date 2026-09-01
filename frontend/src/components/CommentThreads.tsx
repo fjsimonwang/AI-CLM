@@ -32,6 +32,7 @@ export function CommentThreads({ entityType, entityId }: {
     queryKey: key,
     queryFn: () => api(`/comments/${entityType}/${entityId}`),
     refetchInterval: agentPoll && agentPoll.until > Date.now() ? 3500 : false,
+    refetchIntervalInBackground: true,
   });
 
   const [newBody, setNewBody] = useState("");
@@ -47,11 +48,15 @@ export function CommentThreads({ entityType, entityId }: {
   const [foldOpen, setFoldOpen] = useState<Record<string, boolean>>({});
 
   // "✦ Ask agent" is available when the current user has Agent talk on (header toggle);
-  // /agent-channel/status.active reflects that personal opt-in.
+  // /agent-channel/status.active reflects that personal opt-in. `busyThreads` lists threads
+  // whose agent turn is generating right now (drives "An agent is replying" before it lands).
   const statusQuery = useQuery({
     queryKey: ["agent-status", entityId],
-    queryFn: () => api(`/agent-channel/contracts/${entityId}/status`) as Promise<{ active: boolean }>,
+    queryFn: () =>
+      api(`/agent-channel/contracts/${entityId}/status`) as Promise<{ active: boolean; busyThreads?: string[] }>,
     enabled: entityType === "CONTRACT",
+    refetchInterval: agentPoll && agentPoll.until > Date.now() ? 2500 : false,
+    refetchIntervalInBackground: true,
   });
   const agentAsk = !!statusQuery.data?.active && entityType === "CONTRACT";
 
@@ -115,22 +120,25 @@ export function CommentThreads({ entityType, entityId }: {
 
   const threads = q.data || [];
 
-  // Agent activity indicator, shown INSIDE the thread the agents are working on. "Checking with
-  // all agents" while we're waiting on routing / the ask call; "An agent is replying" only once
-  // an actual agent message has landed since we started waiting.
+  // Agent activity indicator, shown INSIDE the thread the agents are working on:
+  //   "Checking with all agents" — routing / the ask call is still in flight, no agent picked up
+  //   "An agent is replying"    — an agent turn is generating right now (server says the thread is busy)
+  // then it clears once the reply has landed and the thread is no longer busy.
   const polling = !!agentPoll && agentPoll.until > Date.now();
+  const agentBusy = !!agentThread && (statusQuery.data?.busyThreads || []).includes(agentThread);
   const agentActive = polling || askAgent.isPending;
-  const agentReplying = !!agentPoll && agentMsgsIn(threads, agentThread) > agentPoll.base;
+  const agentReplying = agentBusy;
+  const agentReplied = !!agentPoll && agentMsgsIn(threads, agentThread) > agentPoll.base;
 
-  // Drop the indicator ~15s after the last agent message lands (the exchange has settled),
-  // or when the overall window elapses if no agent ever replied.
+  // Drop the indicator a few seconds after the reply has landed and no agent turn is still
+  // running, or when the overall window elapses if no agent ever picked it up.
   useEffect(() => {
     if (!agentPoll) return;
-    const replied = agentMsgsIn(threads, agentThread) > agentPoll.base;
-    const ms = replied ? 15_000 : Math.max(0, agentPoll.until - Date.now());
+    const done = agentReplied && !agentBusy;
+    const ms = done ? 4_000 : Math.max(0, agentPoll.until - Date.now());
     const t = window.setTimeout(() => setAgentPoll(null), ms);
     return () => window.clearTimeout(t);
-  }, [threads, agentThread, agentPoll]);
+  }, [agentReplied, agentBusy, agentPoll]);
   const agentStatusFor = (threadId: string) =>
     agentActive && agentThread === threadId ? (
       <div className="mt-3 flex items-center gap-2.5">

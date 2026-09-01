@@ -7,13 +7,15 @@ import { Icon } from "./icons";
 export type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "textarea" | "number" | "boolean" | "select" | "json" | "html" | "html-upload";
+  type?: "text" | "textarea" | "number" | "boolean" | "select" | "multiselect" | "json" | "html" | "html-upload";
   options?: { value: string; label: string }[];
   optionsFrom?: string; // resource key from `refs`
   required?: boolean;
   help?: string;
   hideInTable?: boolean;
   uploadUrl?: string;
+  /** multiselect only: text shown when nothing is ticked (defaults to "Any"). */
+  emptyLabel?: string;
 };
 
 type Ref = { key: string; url: string; labelKey: string; valueKey?: string };
@@ -251,6 +253,41 @@ function EditModal({
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
+                ) : f.type === "multiselect" ? (
+                  (() => {
+                    const picked = new Set(
+                      String(v ?? "").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean),
+                    );
+                    const toggle = (val: string) => {
+                      const u = val.toUpperCase();
+                      picked.has(u) ? picked.delete(u) : picked.add(u);
+                      set(f.key, [...picked].join(","));
+                    };
+                    return (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {optionsFor(f).map((o) => {
+                          const on = picked.has(o.value.toUpperCase());
+                          return (
+                            <button
+                              key={o.value}
+                              type="button"
+                              onClick={() => toggle(o.value)}
+                              className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
+                                on
+                                  ? "border-[color:var(--accent)] bg-accent-soft text-[color:var(--accent)] font-medium"
+                                  : "border-border text-ink-soft hover:border-[color:var(--accent)]"
+                              }`}
+                            >
+                              {o.label}
+                            </button>
+                          );
+                        })}
+                        {picked.size === 0 && (
+                          <span className="text-xs text-ink-faint self-center">{f.emptyLabel || "Any"}</span>
+                        )}
+                      </div>
+                    );
+                  })()
                 ) : f.type === "textarea" || f.type === "html" || f.type === "html-upload" ? (
                   <>
                     {f.type === "html-upload" && f.uploadUrl && (

@@ -57,6 +57,17 @@ public class AgentChannelController {
     private final java.util.concurrent.atomic.AtomicInteger autoInFlight =
             new java.util.concurrent.atomic.AtomicInteger();
 
+    /** Threads whose agent turn is currently generating — drives the "An agent is replying"
+     *  indicator BEFORE the message lands. Value is the start time (ms) for a stale-entry sweep. */
+    private final java.util.Map<UUID, Long> agentBusyThreads = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private void markAgentBusy(UUID threadId) {
+        long now = System.currentTimeMillis();
+        agentBusyThreads.values().removeIf(started -> now - started > 180_000); // safety sweep
+        agentBusyThreads.put(threadId, now);
+    }
+    private void clearAgentBusy(UUID threadId) { agentBusyThreads.remove(threadId); }
+
     @PreDestroy
     void shutdownExec() {
         autoAnswerExec.shutdownNow();
@@ -92,6 +103,7 @@ public class AgentChannelController {
         // Agent talk is governed solely by each user's personal opt-in (the header toggle).
         // It is available on any contract you can view once you have turned it on.
         out.put("active", userOptIn);
+        out.put("busyThreads", agentBusyThreads.keySet().stream().map(UUID::toString).toList());
         return out;
     }
 
@@ -193,14 +205,19 @@ public class AgentChannelController {
         String askerName = userName(askerId);
         List<Map<String, Object>> turns = new ArrayList<>();
         List<String> failed = new ArrayList<>();
-        for (UUID repId : repIds) {
-            ParticipantAgent rep = pool.stream().filter(a -> a.userId.equals(repId)).findFirst().orElse(null);
-            if (rep == null) continue;
-            try {
-                talk(c, t, askerId, dialogue, question, rep, askerName, turns);
-            } catch (Exception e) {
-                failed.add(rep.name);
+        markAgentBusy(threadId);
+        try {
+            for (UUID repId : repIds) {
+                ParticipantAgent rep = pool.stream().filter(a -> a.userId.equals(repId)).findFirst().orElse(null);
+                if (rep == null) continue;
+                try {
+                    talk(c, t, askerId, dialogue, question, rep, askerName, turns);
+                } catch (Exception e) {
+                    failed.add(rep.name);
+                }
             }
+        } finally {
+            clearAgentBusy(threadId);
         }
         Map<String, Object> auditAfter = new LinkedHashMap<>();
         auditAfter.put("threadId", threadId.toString());
@@ -240,12 +257,17 @@ public class AgentChannelController {
         String askerName = userName(askerId);
         boolean dialogue = reps.size() == 1 && optIn(askerId);
         List<Map<String, Object>> turns = new ArrayList<>();
-        for (ParticipantAgent rep : reps) {
-            try {
-                talk(cc, t, askerId, dialogue, question, rep, askerName, turns);
-            } catch (Exception ignored) {
-                // one failing agent must not block the others
+        markAgentBusy(t.id);
+        try {
+            for (ParticipantAgent rep : reps) {
+                try {
+                    talk(cc, t, askerId, dialogue, question, rep, askerName, turns);
+                } catch (Exception ignored) {
+                    // one failing agent must not block the others
+                }
             }
+        } finally {
+            clearAgentBusy(t.id);
         }
         if (!turns.isEmpty()) {
             Map<String, Object> a = new LinkedHashMap<>();

@@ -178,6 +178,71 @@ function renderReply(text: string, onLocate: (key: string) => void) {
 
 type Turn = { reply: string; interactionId: string; modelLive: boolean };
 
+// Page-aware "Ask me: …" nudges shown in a bubble beside the collapsed help icon.
+// Longest matching route prefix wins.
+const PAGE_PROMPTS: { prefix: string; qs: string[] }[] = [
+  { prefix: "/intake", qs: [
+    "How do I answer the intake questions faster?",
+    "How do I upload a counterparty's paper contract?",
+    "What does 'Generate Document Draft' do?",
+    "How do I resume a saved draft request?",
+  ] },
+  { prefix: "/contracts/", qs: [
+    "How do I ask a participant's agent a question here?",
+    "How do I add someone to this contract?",
+    "Where do I see why this contract was rejected?",
+    "How do I detect related contracts with AI?",
+  ] },
+  { prefix: "/contracts", qs: [
+    "How do I add a column to the contract table?",
+    "How do I ask the portfolio a question?",
+    "How do I save an inquiry as a dashboard chart?",
+  ] },
+  { prefix: "/approvals", qs: [
+    "What does the AI approver briefing tell me?",
+    "How do I reject a contract with a reason?",
+    "Why can't I see the approve/reject buttons?",
+  ] },
+  { prefix: "/auto-reject", qs: [
+    "How do I create an auto-rejection rule?",
+    "What does 'Structure with AI' do to my rule?",
+    "How do I dry-run a rule before it goes live?",
+  ] },
+  { prefix: "/obligations", qs: [
+    "What does 'Verify' do to an obligation?",
+    "How do I find obligations that need my review?",
+  ] },
+  { prefix: "/access", qs: [
+    "How do I request access to more contracts?",
+    "How do I approve someone's access request?",
+  ] },
+  { prefix: "/clauses", qs: [
+    "How do I check a counterparty clause against the playbook?",
+    "What do the clause tier badges mean?",
+  ] },
+  { prefix: "/templates", qs: ["How do I preview a template?", "Who can edit templates?"] },
+  { prefix: "/ai-log", qs: ["How do I undo something the AI applied?", "What do the outcome badges mean?"] },
+  { prefix: "/admin", qs: [
+    "How do I upload a policy document for the help assistant?",
+    "How do I scope a policy to certain roles or regions?",
+    "How do I add a new contract type?",
+  ] },
+  { prefix: "/", qs: [
+    "How can I add a new dashboard section?",
+    "How do I rearrange or resize dashboard sections?",
+    "What does the AI insight section show me?",
+    "How do I hide a section I don't use?",
+  ] },
+];
+
+function pickPagePrompt(path: string): string {
+  const match = PAGE_PROMPTS
+    .filter((p) => (p.prefix === "/" ? path === "/" : path.startsWith(p.prefix)))
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+  const qs = match?.qs ?? PAGE_PROMPTS[PAGE_PROMPTS.length - 1].qs;
+  return qs[Math.floor(Math.random() * qs.length)];
+}
+
 export function HelpChat() {
   const loc = useLocation();
   const [dock, setDock] = useState<Dock>(loadDock);
@@ -193,6 +258,9 @@ export function HelpChat() {
   const [hlRing, setHlRing] = useState<{ left: number; top: number; width: number; height: number; tick: number } | null>(
     null
   );
+  const [bubbleQ, setBubbleQ] = useState<string | null>(null);
+  const [bubbleShown, setBubbleShown] = useState(false); // drives the fade
+  const bubbleTimers = useRef<{ hide?: number; idle?: number; next?: number }>({});
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const panelDragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const draggedRef = useRef(false);
@@ -223,6 +291,47 @@ export function HelpChat() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [msgs, sending, open]);
+
+  // Page-aware "Ask me: …" nudge: fades in on a new page, and again when the user pauses on a
+  // page; auto-fades after 10s so it never nags. Suppressed while the chat is open.
+  const clearBubbleTimers = () => {
+    Object.values(bubbleTimers.current).forEach((t) => t && window.clearTimeout(t));
+    bubbleTimers.current = {};
+  };
+  const showBubble = React.useCallback(() => {
+    if (open) return;
+    clearBubbleTimers();
+    setBubbleQ(pickPagePrompt(loc.pathname));
+    setBubbleShown(true);
+    bubbleTimers.current.hide = window.setTimeout(() => setBubbleShown(false), 10_000);
+  }, [open, loc.pathname]);
+
+  // fresh nudge on navigation
+  useEffect(() => {
+    if (open) { setBubbleShown(false); return; }
+    const t = window.setTimeout(showBubble, 900); // let the page settle first
+    return () => window.clearTimeout(t);
+  }, [loc.pathname, open, showBubble]);
+
+  // "guide me when I stop": re-surface a nudge after a stretch of inactivity, rate-limited
+  useEffect(() => {
+    if (open) return;
+    const bump = () => {
+      window.clearTimeout(bubbleTimers.current.idle);
+      bubbleTimers.current.idle = window.setTimeout(() => {
+        if (!bubbleShown) showBubble();
+      }, 22_000);
+    };
+    const evs = ["mousemove", "keydown", "scroll", "click"] as const;
+    evs.forEach((e) => window.addEventListener(e, bump, { passive: true }));
+    bump();
+    return () => {
+      evs.forEach((e) => window.removeEventListener(e, bump));
+      window.clearTimeout(bubbleTimers.current.idle);
+    };
+  }, [open, bubbleShown, showBubble]);
+
+  useEffect(() => () => clearBubbleTimers(), []);
 
   // ---------------- icon drag ----------------
   const onPointerDown = (e: React.PointerEvent) => {
@@ -516,6 +625,41 @@ export function HelpChat() {
           }}
           key={hlRing.tick}
         />
+      )}
+
+      {!open && !dragging && bubbleQ && (
+        <div
+          className="fixed z-[59] max-w-[240px] rounded-xl px-3 py-2 text-xs leading-snug shadow-lg"
+          style={{
+            top: Math.min(Math.max(pos.top + ICON / 2 - 22, EDGE), window.innerHeight - 80),
+            ...(dock.side === "right"
+              ? { right: window.innerWidth - pos.left + 10 }
+              : { left: pos.left + ICON + 10 }),
+            background: "var(--surface)",
+            border: "1px solid color-mix(in srgb, var(--accent) 35%, var(--border))",
+            opacity: bubbleShown ? 1 : 0,
+            transform: bubbleShown ? "translateY(0)" : "translateY(4px)",
+            pointerEvents: bubbleShown ? "auto" : "none",
+            transition: "opacity 320ms ease, transform 320ms ease",
+          }}
+          role="button"
+          tabIndex={bubbleShown ? 0 : -1}
+          onClick={() => { setBubbleShown(false); setOpen(true); send(bubbleQ); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { setBubbleShown(false); setOpen(true); send(bubbleQ); } }}
+          onMouseEnter={() => window.clearTimeout(bubbleTimers.current.hide)}
+          title="Ask the help assistant this"
+        >
+          <button
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 grid place-items-center rounded-full text-[10px]"
+            style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+            onClick={(e) => { e.stopPropagation(); setBubbleShown(false); }}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+          <span className="text-ink-faint">Ask me: </span>
+          <span className="text-ink font-medium">{bubbleQ}</span>
+        </div>
       )}
 
       <button

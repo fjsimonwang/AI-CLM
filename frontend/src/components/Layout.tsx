@@ -26,6 +26,7 @@ export function adminTabs(can: (perm: string) => boolean): { key: string; label:
     { key: "scopes", label: "Approver scopes" },
     { key: "grants", label: "Access grants" },
     { key: "review-rules", label: "AI review rules" },
+    { key: "policies", label: "Policies & procedures" },
   ];
 }
 
@@ -81,8 +82,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navCollapsed = collapsed && !isMobile;
   const c = navCollapsed;
   const onAdmin = location.pathname === "/admin";
-  const [adminOpen, setAdminOpen] = useState(false);
-  const adminShown = !c && can("MANAGE_MASTERDATA") && (onAdmin || adminOpen);
+  const [adminOpen, setAdminOpen] = useState(onAdmin);
+  // opening the Administration page (from anywhere) expands its submenu; a manual collapse
+  // while already on the page then sticks because onAdmin doesn't change.
+  useEffect(() => { if (onAdmin) setAdminOpen(true); }, [onAdmin]);
+  const adminShown = !c && can("MANAGE_MASTERDATA") && adminOpen;
   const adminTab = new URLSearchParams(location.search).get("tab") || "entities";
   const pending = usePending();
   const badgeVal = (key?: string): number => (key ? Number((pending.data as any)?.[key] || 0) : 0);
@@ -154,8 +158,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div key={group.section}>
                   <button
                     onClick={() => {
-                      setAdminOpen(!adminShown);
-                      nav("/admin");
+                      if (onAdmin) setAdminOpen((o) => !o);
+                      else { setAdminOpen(true); nav("/admin"); }
                     }}
                     title={c ? group.items[0].label : undefined}
                     className={`w-full group relative flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-sm transition-colors ${
@@ -277,7 +281,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             <Icon.menu width={16} height={16} />
           </button>
-          <div className="flex-1" />
+          <div className="flex-1 min-w-0">
+            {location.pathname === "/" && (
+              <div className="hidden lg:inline-flex items-center gap-2 max-w-full">
+                <Icon.sparkle width={16} height={16} className="shrink-0" style={{ color: "var(--ai)" }} />
+                <span className="truncate text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                  This CLM Platform is a future-facing, AI-driven platform — AI agents work together with you.
+                </span>
+              </div>
+            )}
+          </div>
           <AgentOptInChip />
           <select
             className="input hidden sm:block"
@@ -319,9 +332,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Per-user agent participation toggle — off means the user's agent neither sends nor receives. */
+/** Master AI switch — controls AI insight, AI briefings AND agent discussion for this user. */
 function AgentOptInChip() {
   const qc = useQueryClient();
+  const [confirm, setConfirm] = useState(false);
   const q = useQuery({
     queryKey: ["me-agent-setting"],
     queryFn: () => api("/me/agent-setting") as Promise<{ agentOptIn: boolean }>,
@@ -329,39 +343,72 @@ function AgentOptInChip() {
   const set = useMutation({
     mutationFn: (enabled: boolean) => api("/me/agent-setting", { method: "PATCH", json: { enabled } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["me-agent-setting"] });
-      qc.invalidateQueries({ queryKey: ["agent-status"] });
-      qc.invalidateQueries({ queryKey: ["agent-agents"] });
+      setConfirm(false);
+      qc.invalidateQueries(); // insight, briefings, agent status all depend on this
     },
   });
   const on = !!q.data?.agentOptIn;
   return (
-    <button
-      className="btn shrink-0"
-      style={{ padding: "0.3rem 0.6rem", fontSize: "12px" }}
-      disabled={q.isLoading || set.isPending}
-      title={
-        on
-          ? "Agent collaboration: your agent may join contract discussions. Click to turn it off."
-          : "Agent collaboration is off: your agent sends and receives nothing. Click to turn it on."
-      }
-      onClick={() => set.mutate(!on)}
-    >
-      <Icon.bot
-        width={15}
-        height={15}
-        style={{ color: on ? "#7c3aed" : "currentColor", transition: "color 0.2s" }}
-      />
-      <span
-        className="relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 shrink-0"
-        style={{ background: on ? "#22c55e" : "var(--ink-faint)" }}
+    <>
+      <button
+        className="btn shrink-0"
+        style={{ padding: "0.3rem 0.6rem", fontSize: "12px" }}
+        disabled={q.isLoading || set.isPending}
+        title={
+          on
+            ? "AI is ON — AI insight, AI briefings and agent discussion. Click to review turning it off."
+            : "AI is OFF — no AI insight, briefings or agent discussion. Click to review turning it on."
+        }
+        onClick={() => setConfirm(true)}
       >
+        <Icon.bot width={15} height={15} style={{ color: on ? "#7c3aed" : "currentColor", transition: "color 0.2s" }} />
         <span
-          className="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow"
-          style={{ transition: "transform 0.2s", transform: on ? "translateX(14px)" : "none" }}
-        />
-      </span>
-      <span className="hidden sm:inline">Agent&nbsp;talk</span>
-    </button>
+          className="relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 shrink-0"
+          style={{ background: on ? "#22c55e" : "var(--ink-faint)" }}
+        >
+          <span
+            className="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow"
+            style={{ transition: "transform 0.2s", transform: on ? "translateX(14px)" : "none" }}
+          />
+        </span>
+        <span className="hidden sm:inline">Agent&nbsp;talk</span>
+      </button>
+
+      {confirm && (
+        <div
+          className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(3px)" }}
+          onClick={() => setConfirm(false)}
+        >
+          <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-medium">{on ? "Turn AI off?" : "Turn AI on?"}</h2>
+            <p className="text-sm text-ink-soft mt-2 leading-relaxed">
+              This one switch controls all of your working-alongside-you AI:
+            </p>
+            <ul className="text-sm text-ink-soft mt-1.5 list-disc pl-5 space-y-0.5">
+              <li>the dashboard <b>AI insight</b></li>
+              <li>the <b>AI approver briefings</b> on contracts and Approvals</li>
+              <li>your <b>agent's participation</b> in contract discussions</li>
+            </ul>
+            <p className="text-sm text-ink-soft mt-2">
+              {on
+                ? "While off, none of these run for you and nothing is sent to the model on your behalf."
+                : "Turning it on lets these features generate content and your agent answer on your behalf."}
+            </p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn" onClick={() => setConfirm(false)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                style={on ? { background: "var(--risk)", borderColor: "var(--risk)" } : {}}
+                disabled={set.isPending}
+                onClick={() => set.mutate(!on)}
+              >
+                {set.isPending ? "Saving…" : on ? "Turn AI off" : "Turn AI on"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

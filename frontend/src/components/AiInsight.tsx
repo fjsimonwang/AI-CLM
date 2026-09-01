@@ -29,6 +29,7 @@ export function AiInsight() {
   const deepFailed = deepQ.data?.failed === true;
 
   const data: any = q.data || {};
+  const aiDisabled = data.aiDisabled === true;
   const sig = data.signals || null;
   const signalCount = sig
     ? ["openTasks", "overdueTasks", "highRisks", "overdueObligations", "failingAi", "expiringSoon"]
@@ -43,6 +44,15 @@ export function AiInsight() {
         { key: "suggestions", label: "Suggested next actions", items: deepInsight.suggestions || [], sev: false, steps: true },
       ]
     : [];
+
+  if (aiDisabled) {
+    return (
+      <div className="card px-4 py-3 flex items-center gap-2.5 text-sm text-ink-faint" style={{ borderColor: "var(--border)" }}>
+        <Icon.sparkle width={15} height={15} className="shrink-0" />
+        AI insight is off. Turn on <span className="font-medium text-ink-soft">Agent&nbsp;talk</span> in the header to re-enable AI features.
+      </div>
+    );
+  }
 
   return (
     <div
