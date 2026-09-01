@@ -178,6 +178,71 @@ function renderReply(text: string, onLocate: (key: string) => void) {
 
 type Turn = { reply: string; interactionId: string; modelLive: boolean };
 
+// Page-aware "Ask me: …" nudges shown in a bubble beside the collapsed help icon.
+// Longest matching route prefix wins.
+const PAGE_PROMPTS: { prefix: string; qs: string[] }[] = [
+  { prefix: "/intake", qs: [
+    "How do I answer the intake questions faster?",
+    "How do I upload a counterparty's paper contract?",
+    "What does 'Generate Document Draft' do?",
+    "How do I resume a saved draft request?",
+  ] },
+  { prefix: "/contracts/", qs: [
+    "How do I ask a participant's agent a question here?",
+    "How do I add someone to this contract?",
+    "Where do I see why this contract was rejected?",
+    "How do I detect related contracts with AI?",
+  ] },
+  { prefix: "/contracts", qs: [
+    "How do I add a column to the contract table?",
+    "How do I ask the portfolio a question?",
+    "How do I save an inquiry as a dashboard chart?",
+  ] },
+  { prefix: "/approvals", qs: [
+    "What does the AI approver briefing tell me?",
+    "How do I reject a contract with a reason?",
+    "Why can't I see the approve/reject buttons?",
+  ] },
+  { prefix: "/auto-reject", qs: [
+    "How do I create an auto-rejection rule?",
+    "What does 'Structure with AI' do to my rule?",
+    "How do I dry-run a rule before it goes live?",
+  ] },
+  { prefix: "/obligations", qs: [
+    "What does 'Verify' do to an obligation?",
+    "How do I find obligations that need my review?",
+  ] },
+  { prefix: "/access", qs: [
+    "How do I request access to more contracts?",
+    "How do I approve someone's access request?",
+  ] },
+  { prefix: "/clauses", qs: [
+    "How do I check a counterparty clause against the playbook?",
+    "What do the clause tier badges mean?",
+  ] },
+  { prefix: "/templates", qs: ["How do I preview a template?", "Who can edit templates?"] },
+  { prefix: "/ai-log", qs: ["How do I undo something the AI applied?", "What do the outcome badges mean?"] },
+  { prefix: "/admin", qs: [
+    "How do I upload a policy document for the help assistant?",
+    "How do I scope a policy to certain roles or regions?",
+    "How do I add a new contract type?",
+  ] },
+  { prefix: "/", qs: [
+    "How can I add a new dashboard section?",
+    "How do I rearrange or resize dashboard sections?",
+    "What does the AI insight section show me?",
+    "How do I hide a section I don't use?",
+  ] },
+];
+
+function pickPagePrompt(path: string): string {
+  const match = PAGE_PROMPTS
+    .filter((p) => (p.prefix === "/" ? path === "/" : path.startsWith(p.prefix)))
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+  const qs = match?.qs ?? PAGE_PROMPTS[PAGE_PROMPTS.length - 1].qs;
+  return qs[Math.floor(Math.random() * qs.length)];
+}
+
 export function HelpChat() {
   const loc = useLocation();
   const [dock, setDock] = useState<Dock>(loadDock);
@@ -193,6 +258,8 @@ export function HelpChat() {
   const [hlRing, setHlRing] = useState<{ left: number; top: number; width: number; height: number; tick: number } | null>(
     null
   );
+  const [bubbleQ, setBubbleQ] = useState<string | null>(null);
+  const [bubbleHidden, setBubbleHidden] = useState(false);
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const panelDragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const draggedRef = useRef(false);
@@ -223,6 +290,13 @@ export function HelpChat() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [msgs, sending, open]);
+
+  // A fresh page-specific "Ask me: …" nudge whenever the route changes (and the chat is closed).
+  useEffect(() => {
+    if (open) return;
+    setBubbleHidden(false);
+    setBubbleQ(pickPagePrompt(loc.pathname));
+  }, [loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------- icon drag ----------------
   const onPointerDown = (e: React.PointerEvent) => {
@@ -516,6 +590,36 @@ export function HelpChat() {
           }}
           key={hlRing.tick}
         />
+      )}
+
+      {!open && !dragging && !bubbleHidden && bubbleQ && (
+        <div
+          className="fixed z-[59] max-w-[240px] rounded-xl px-3 py-2 text-xs leading-snug shadow-lg pop-in"
+          style={{
+            top: Math.min(Math.max(pos.top + ICON / 2 - 22, EDGE), window.innerHeight - 80),
+            ...(dock.side === "right"
+              ? { right: window.innerWidth - pos.left + 10 }
+              : { left: pos.left + ICON + 10 }),
+            background: "var(--surface)",
+            border: "1px solid color-mix(in srgb, var(--accent) 35%, var(--border))",
+          }}
+          role="button"
+          tabIndex={0}
+          onClick={() => { setOpen(true); send(bubbleQ); setBubbleHidden(true); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { setOpen(true); send(bubbleQ); setBubbleHidden(true); } }}
+          title="Ask the help assistant this"
+        >
+          <button
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 grid place-items-center rounded-full text-[10px]"
+            style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+            onClick={(e) => { e.stopPropagation(); setBubbleHidden(true); }}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+          <span className="text-ink-faint">Ask me: </span>
+          <span className="text-ink font-medium">{bubbleQ}</span>
+        </div>
       )}
 
       <button
