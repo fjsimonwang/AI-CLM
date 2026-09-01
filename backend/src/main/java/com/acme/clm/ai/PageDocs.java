@@ -122,12 +122,15 @@ public final class PageDocs {
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
             An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
             approver briefing).
-            DISCUSSION SIDE PANEL: comment threads live in a panel pinned to the LEFT of the tabbed
-            content (not a tab), always visible alongside whatever tab is open — "New thread",
-            reply, resolve, and a "✦ Ask agent" action per thread when you have Agent talk on (see
-            CROSS-CUTTING FEATURES below). An "×" hides the panel (a "Show discussion" button brings
-            it back; the choice is remembered); a link with ?tab=discussion opens it.
-            TABS (to the right of the discussion panel): "Overview" (key-value terms: contracting
+            DISCUSSION PANEL: comment threads live in a FLOATING, DRAGGABLE panel (not a tab),
+            docked full-height to the left edge by default — drag its header to move it anywhere;
+            its position and open/closed state are remembered. "New thread" (just a message, no
+            title), reply, resolve, and a "✦ Ask agent" action per thread when you have Agent talk
+            on (see CROSS-CUTTING FEATURES below). An "×" hides the panel (a "Show discussion"
+            button brings it back); a link with ?tab=discussion opens it. While participants' agents
+            are working the panel shows an animated status — "Checking with all agents", then
+            "An agent is replying" once one starts.
+            TABS: "Overview" (key-value terms: contracting
             entity, counterparties, governing law, value, dates, owner, liability; grouped "Deal
             terms"; "Clauses used" with tier badges; "People with access" — add/remove participants
             via "add person"; "Hierarchy" child links);
@@ -296,8 +299,10 @@ public final class PageDocs {
             - Using it: open a Discussion thread on a contract and click "✦ Ask agent". Pick "Auto —
               best placed to answer" (the system routes the question to the participant whose role
               best fits — financial / legal / approval / general) or target a specific person's
-              agent from the dropdown. The chosen agent replies in the thread, tagged "<Name>
-              (agent)" with violet styling.
+              agent from the dropdown. While this runs the panel shows "Checking with all agents",
+              switching to "An agent is replying" once one does; the reply lands in the thread
+              tagged "<Name> (agent)" with violet styling. Posting a new thread with Agent talk on
+              triggers the same auto-answer without the "✦ Ask agent" click.
             - Back-and-forth: for a targeted question, if the asker also has their agent enabled,
               the asker's agent may auto-review the answer and post one follow-up question; the
               target agent answers once more (bounded — it stops after a couple of exchanges).
