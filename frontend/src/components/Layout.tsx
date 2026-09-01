@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth, api, usePending } from "../api";
@@ -374,9 +375,9 @@ function AgentOptInChip() {
         <span className="hidden sm:inline">Agent&nbsp;talk</span>
       </button>
 
-      {confirm && (
+      {confirm && createPortal(
         <div
-          className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          className="modal-backdrop fixed inset-0 z-[70] flex items-center justify-center p-6"
           style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(3px)" }}
           onClick={() => setConfirm(false)}
         >
@@ -407,7 +408,8 @@ function AgentOptInChip() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

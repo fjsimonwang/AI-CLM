@@ -46,6 +46,8 @@ public final class PageDocs {
     private PageDocs() {
         add("/", """
             DASHBOARD (/) — titled "Portfolio", the personal landing page.
+            The top header shows a small "AI-driven platform / AI agents work together with you"
+            banner here only.
             Header: "Portfolio · N contracts · total value" and a "Customize"/"Done" toggle button.
             Sections (user-arrangeable, drag to reorder in Customize mode): "AI insight", "Needs your
             attention", "Key numbers" (stat cards: "Contracts you can access", "Expiring ≤ 90 days",
@@ -279,8 +281,9 @@ public final class PageDocs {
             take it out of the assistant's knowledge without deleting it.
             """);
         add("/login", """
-            LOGIN (/login) — email/password sign-in plus a clickable demo-account list for the demo
-            environment. Not part of the signed-in experience.
+            LOGIN (/login) — email/password sign-in. The demo environment also lists demo accounts
+            grouped by role; clicking one signs in as that user after a quick arithmetic
+            "not a robot" check. Not part of the signed-in experience.
             """);
     }
 
@@ -299,6 +302,11 @@ public final class PageDocs {
         return """
             CROSS-CUTTING FEATURES (available across pages, not tied to one route):
 
+            HELP ASSISTANT NUDGES — beside the collapsed help icon a small "Ask me: …" bubble
+            fades in with a question relevant to the current page; it fades out after ~10s and
+            re-appears after a stretch of inactivity. Clicking it opens the chat and asks that
+            question. It is deliberately low-key.
+
             HELP ASSISTANT KNOWLEDGE — besides how-to guidance, the floating help chat can answer
             questions about the organisation's own CLM policies and procedures. Admins upload those
             documents under Administration → "Policies & procedures" and tag each with the roles /
@@ -310,10 +318,11 @@ public final class PageDocs {
             AGENT COLLABORATION / "AGENT TALK" — each participant on a contract can have a personal
             AI agent that takes part in that contract's Discussion threads, speaking AS that person
             (first person), grounded in the contract record.
-            - The only switch: the bot-icon toggle in the top header ("Agent talk" chip). Off means
-              your agent neither sends nor receives anything; on, you can ask participants' agents
-              on any contract you can view (PATCH /me/agent-setting). There is no per-contract
-              switch.
+            - The "Agent talk" toggle in the top header is the MASTER AI SWITCH for the user: it
+              controls agent discussion AND the dashboard AI insight AND the AI approver briefings.
+              Toggling it opens a confirmation dialog listing all three. While off, none of those
+              run for the user and the dashboard/contract show an "AI off" hint instead. There is
+              no per-contract switch (PATCH /me/agent-setting).
             - Using it: open a Discussion thread on a contract and click "✦ Ask agent". Pick "Auto —
               best placed to answer" (the system routes the question to the participant whose role
               best fits — financial / legal / approval / general) or target a specific person's

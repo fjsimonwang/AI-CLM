@@ -1190,8 +1190,8 @@ export default function Intake() {
       </Card>
       </>}
       right={<>
-      <div className="space-y-4 max-lg:h-auto max-lg:overflow-visible lg:h-[calc(100vh-160px)] lg:overflow-y-auto pr-1 pb-20">
-        <div className="space-y-4 max-lg:h-auto max-lg:overflow-visible lg:h-[calc(100vh-160px)] lg:overflow-y-auto pr-1 pb-20">
+      <div className="relative max-lg:h-auto lg:h-[calc(100vh-160px)]">
+        <div className="space-y-4 max-lg:h-auto max-lg:overflow-visible lg:h-full lg:overflow-y-auto pr-1 pb-20">
         {session?.paperFilename && (
           <Card>
             <SectionTitle>
