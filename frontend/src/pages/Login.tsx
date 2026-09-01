@@ -50,7 +50,16 @@ export default function Login() {
     doLogin(email, password);
   };
 
+  // the human check only needs to pass once per browser session
+  const checkDone = () => {
+    try { return sessionStorage.getItem("clm.humanCheckPassed") === "1"; } catch { return false; }
+  };
+
   const openCheck = (user: DemoUser) => {
+    if (checkDone()) {
+      doLogin(user.email, user.password);
+      return;
+    }
     setAnswer("");
     setCheckErr("");
     setCheck({ user, ...newSum() });
@@ -60,6 +69,7 @@ export default function Login() {
     e.preventDefault();
     if (!check) return;
     if (parseInt(answer.trim(), 10) === check.a + check.b) {
+      try { sessionStorage.setItem("clm.humanCheckPassed", "1"); } catch { /* ignore */ }
       doLogin(check.user.email, check.user.password);
     } else {
       setCheckErr("Not quite — try again.");
@@ -107,7 +117,7 @@ export default function Login() {
         {demo.length > 0 && (
           <div className="card p-4 mt-4">
             <div className="text-xs text-ink-faint mb-2">
-              Demo accounts — one click to sign in (a quick human check follows)
+              Demo accounts — one click to sign in (a quick human check once per session)
             </div>
             <div className="space-y-2.5 max-h-[46vh] overflow-y-auto pr-1">
               {Object.entries(grouped).map(([role, us]) => (

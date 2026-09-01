@@ -300,7 +300,8 @@ public final class PageDocs {
         add("/login", """
             LOGIN (/login) — email/password sign-in. The demo environment also lists demo accounts
             grouped by role; clicking one signs in as that user after a quick arithmetic
-            "not a robot" check. Not part of the signed-in experience.
+            "not a robot" check — which is only asked once per browser session. Not part of the
+            signed-in experience.
             """);
     }
 
