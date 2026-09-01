@@ -259,7 +259,8 @@ export function HelpChat() {
     null
   );
   const [bubbleQ, setBubbleQ] = useState<string | null>(null);
-  const [bubbleHidden, setBubbleHidden] = useState(false);
+  const [bubbleShown, setBubbleShown] = useState(false); // drives the fade
+  const bubbleTimers = useRef<{ hide?: number; idle?: number; next?: number }>({});
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const panelDragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const draggedRef = useRef(false);
@@ -291,12 +292,46 @@ export function HelpChat() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [msgs, sending, open]);
 
-  // A fresh page-specific "Ask me: …" nudge whenever the route changes (and the chat is closed).
+  // Page-aware "Ask me: …" nudge: fades in on a new page, and again when the user pauses on a
+  // page; auto-fades after 10s so it never nags. Suppressed while the chat is open.
+  const clearBubbleTimers = () => {
+    Object.values(bubbleTimers.current).forEach((t) => t && window.clearTimeout(t));
+    bubbleTimers.current = {};
+  };
+  const showBubble = React.useCallback(() => {
+    if (open) return;
+    clearBubbleTimers();
+    setBubbleQ(pickPagePrompt(loc.pathname));
+    setBubbleShown(true);
+    bubbleTimers.current.hide = window.setTimeout(() => setBubbleShown(false), 10_000);
+  }, [open, loc.pathname]);
+
+  // fresh nudge on navigation
+  useEffect(() => {
+    if (open) { setBubbleShown(false); return; }
+    const t = window.setTimeout(showBubble, 900); // let the page settle first
+    return () => window.clearTimeout(t);
+  }, [loc.pathname, open, showBubble]);
+
+  // "guide me when I stop": re-surface a nudge after a stretch of inactivity, rate-limited
   useEffect(() => {
     if (open) return;
-    setBubbleHidden(false);
-    setBubbleQ(pickPagePrompt(loc.pathname));
-  }, [loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+    const bump = () => {
+      window.clearTimeout(bubbleTimers.current.idle);
+      bubbleTimers.current.idle = window.setTimeout(() => {
+        if (!bubbleShown) showBubble();
+      }, 22_000);
+    };
+    const evs = ["mousemove", "keydown", "scroll", "click"] as const;
+    evs.forEach((e) => window.addEventListener(e, bump, { passive: true }));
+    bump();
+    return () => {
+      evs.forEach((e) => window.removeEventListener(e, bump));
+      window.clearTimeout(bubbleTimers.current.idle);
+    };
+  }, [open, bubbleShown, showBubble]);
+
+  useEffect(() => () => clearBubbleTimers(), []);
 
   // ---------------- icon drag ----------------
   const onPointerDown = (e: React.PointerEvent) => {
@@ -592,9 +627,9 @@ export function HelpChat() {
         />
       )}
 
-      {!open && !dragging && !bubbleHidden && bubbleQ && (
+      {!open && !dragging && bubbleQ && (
         <div
-          className="fixed z-[59] max-w-[240px] rounded-xl px-3 py-2 text-xs leading-snug shadow-lg pop-in"
+          className="fixed z-[59] max-w-[240px] rounded-xl px-3 py-2 text-xs leading-snug shadow-lg"
           style={{
             top: Math.min(Math.max(pos.top + ICON / 2 - 22, EDGE), window.innerHeight - 80),
             ...(dock.side === "right"
@@ -602,17 +637,22 @@ export function HelpChat() {
               : { left: pos.left + ICON + 10 }),
             background: "var(--surface)",
             border: "1px solid color-mix(in srgb, var(--accent) 35%, var(--border))",
+            opacity: bubbleShown ? 1 : 0,
+            transform: bubbleShown ? "translateY(0)" : "translateY(4px)",
+            pointerEvents: bubbleShown ? "auto" : "none",
+            transition: "opacity 320ms ease, transform 320ms ease",
           }}
           role="button"
-          tabIndex={0}
-          onClick={() => { setOpen(true); send(bubbleQ); setBubbleHidden(true); }}
-          onKeyDown={(e) => { if (e.key === "Enter") { setOpen(true); send(bubbleQ); setBubbleHidden(true); } }}
+          tabIndex={bubbleShown ? 0 : -1}
+          onClick={() => { setBubbleShown(false); setOpen(true); send(bubbleQ); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { setBubbleShown(false); setOpen(true); send(bubbleQ); } }}
+          onMouseEnter={() => window.clearTimeout(bubbleTimers.current.hide)}
           title="Ask the help assistant this"
         >
           <button
             className="absolute -top-1.5 -right-1.5 w-4 h-4 grid place-items-center rounded-full text-[10px]"
             style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
-            onClick={(e) => { e.stopPropagation(); setBubbleHidden(true); }}
+            onClick={(e) => { e.stopPropagation(); setBubbleShown(false); }}
             aria-label="Dismiss"
           >
             ✕

@@ -60,13 +60,15 @@ public class AiInsightService {
     private final Repos.CommentThreads threads;
     private final Repos.CommentMessages messages;
     private final AiService ai;
+    private final AiFeatures aiFeatures;
 
     public AiInsightService(Repos.Contracts contracts, Repos.ContractParticipants participants,
                             Repos.WorkflowTasks tasks, Repos.WorkflowInstances instances,
                             Repos.AuditEvents audits, Repos.AiInteractions interactions,
                             Repos.Obligations obligations, Repos.ContractRisks risks, Repos.Users users,
                             Repos.CommentThreads threads, Repos.CommentMessages messages,
-                            AiService ai) {
+                            AiService ai, AiFeatures aiFeatures) {
+        this.aiFeatures = aiFeatures;
         this.contracts = contracts;
         this.participants = participants;
         this.tasks = tasks;
@@ -94,7 +96,7 @@ public class AiInsightService {
      * user reaches the dashboard. No-op when today's insight is already cached or generating.
      */
     public void onLogin(UUID userId) {
-        kickQuick(userId);
+        if (aiFeatures.enabledFor(userId)) kickQuick(userId);
     }
 
     /** The fast triage insight is regenerated when older than this — it is cheap to run. */

@@ -41,14 +41,17 @@ public class AiController {
     private final AiInsightService insightService;
     private final AccessService access;
     private final com.acme.clm.service.PolicyService policies;
+    private final com.acme.clm.service.AiFeatures aiFeatures;
 
     public AiController(Repos.AiInteractions interactions, Repos.Contracts contracts, Repos.ClauseVariants clauseVariants,
                         Repos.ClauseConcepts clauseConcepts, AiService ai, AiInteractionLog aiLog,
                         AuditService audit, CurrentUser current, Repos.PrecedentLinks precedents,
                         Repos.AiReviewRules reviewRules,
                         BriefingService briefings, ReviewService review, AiInsightService insightService,
-                        AccessService access, com.acme.clm.service.PolicyService policies) {
+                        AccessService access, com.acme.clm.service.PolicyService policies,
+                        com.acme.clm.service.AiFeatures aiFeatures) {
         this.policies = policies;
+        this.aiFeatures = aiFeatures;
         this.interactions = interactions;
         this.contracts = contracts;
         this.clauseVariants = clauseVariants;
@@ -238,18 +241,28 @@ public class AiController {
     @PostMapping("/approver-briefing")
     public Map<String, Object> approverBriefing(@RequestBody SummarizeRequest req,
                                                 @RequestParam(defaultValue = "false") boolean force) {
+        if (!aiFeatures.enabledFor(current.id())) return aiOff();
         Map<String, Object> out = new LinkedHashMap<>(briefings.getOrCreate(req.contractId(), current.id(), force));
         out.put("modelLive", ai.modelIsLive());
         return out;
     }
 
+    /** Response when the user has turned their AI features (the "Agent talk" toggle) off. */
+    private static Map<String, Object> aiOff() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("aiDisabled", true);
+        return m;
+    }
+
     @GetMapping("/briefings")
     public Map<String, Object> briefings(@RequestParam List<UUID> contractIds) {
+        if (!aiFeatures.enabledFor(current.id())) return Map.of();
         return briefings.existingFor(contractIds);
     }
 
     @PostMapping("/briefings/prepare")
     public Map<String, Object> prepareBriefings() {
+        if (!aiFeatures.enabledFor(current.id())) return Map.of("queued", 0);
         return Map.of("queued", briefings.prepareForUser(current.id()));
     }
 
@@ -259,6 +272,7 @@ public class AiController {
      */
     @GetMapping("/insight")
     public Map<String, Object> insight(@RequestParam(defaultValue = "false") boolean force) {
+        if (!aiFeatures.enabledFor(current.id())) return aiOff();
         Map<String, Object> out = new LinkedHashMap<>(insightService.view(current.id(), force));
         out.put("modelLive", ai.modelIsLive());
         return out;
@@ -267,6 +281,7 @@ public class AiController {
     /** The heavier "deeper analysis" insight — generated only when the user asks for it. */
     @GetMapping("/insight/deep")
     public Map<String, Object> insightDeep(@RequestParam(defaultValue = "false") boolean force) {
+        if (!aiFeatures.enabledFor(current.id())) return aiOff();
         Map<String, Object> out = new LinkedHashMap<>(insightService.deepView(current.id(), force));
         out.put("modelLive", ai.modelIsLive());
         return out;
