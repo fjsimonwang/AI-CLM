@@ -26,6 +26,7 @@ export function adminTabs(can: (perm: string) => boolean): { key: string; label:
     { key: "scopes", label: "Approver scopes" },
     { key: "grants", label: "Access grants" },
     { key: "review-rules", label: "AI review rules" },
+    { key: "policies", label: "Policies & procedures" },
   ];
 }
 
@@ -81,8 +82,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navCollapsed = collapsed && !isMobile;
   const c = navCollapsed;
   const onAdmin = location.pathname === "/admin";
-  const [adminOpen, setAdminOpen] = useState(false);
-  const adminShown = !c && can("MANAGE_MASTERDATA") && (onAdmin || adminOpen);
+  const [adminOpen, setAdminOpen] = useState(onAdmin);
+  // opening the Administration page (from anywhere) expands its submenu; a manual collapse
+  // while already on the page then sticks because onAdmin doesn't change.
+  useEffect(() => { if (onAdmin) setAdminOpen(true); }, [onAdmin]);
+  const adminShown = !c && can("MANAGE_MASTERDATA") && adminOpen;
   const adminTab = new URLSearchParams(location.search).get("tab") || "entities";
   const pending = usePending();
   const badgeVal = (key?: string): number => (key ? Number((pending.data as any)?.[key] || 0) : 0);
@@ -154,8 +158,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div key={group.section}>
                   <button
                     onClick={() => {
-                      setAdminOpen(!adminShown);
-                      nav("/admin");
+                      if (onAdmin) setAdminOpen((o) => !o);
+                      else { setAdminOpen(true); nav("/admin"); }
                     }}
                     title={c ? group.items[0].label : undefined}
                     className={`w-full group relative flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-sm transition-colors ${

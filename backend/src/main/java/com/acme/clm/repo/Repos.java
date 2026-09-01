@@ -196,6 +196,10 @@ public final class Repos {
         List<Playbook> findByIsActiveTrue();
     }
 
+    public interface PolicyDocuments extends JpaRepository<PolicyDocument, UUID> {
+        List<PolicyDocument> findByIsActiveTrueOrderByTitleAsc();
+    }
+
     public interface ReviewRuns extends JpaRepository<AiReviewRun, UUID> {
         Optional<AiReviewRun> findFirstByContractIdOrderByCreatedAtDesc(UUID contractId);
         List<AiReviewRun> findByContractIdOrderByCreatedAtDesc(UUID contractId);

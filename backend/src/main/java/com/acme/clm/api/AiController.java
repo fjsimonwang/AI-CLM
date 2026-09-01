@@ -40,13 +40,15 @@ public class AiController {
     private final ReviewService review;
     private final AiInsightService insightService;
     private final AccessService access;
+    private final com.acme.clm.service.PolicyService policies;
 
     public AiController(Repos.AiInteractions interactions, Repos.Contracts contracts, Repos.ClauseVariants clauseVariants,
                         Repos.ClauseConcepts clauseConcepts, AiService ai, AiInteractionLog aiLog,
                         AuditService audit, CurrentUser current, Repos.PrecedentLinks precedents,
                         Repos.AiReviewRules reviewRules,
                         BriefingService briefings, ReviewService review, AiInsightService insightService,
-                        AccessService access) {
+                        AccessService access, com.acme.clm.service.PolicyService policies) {
+        this.policies = policies;
         this.interactions = interactions;
         this.contracts = contracts;
         this.clauseVariants = clauseVariants;
@@ -285,7 +287,9 @@ public class AiController {
                 else history.add(LlmClient.Message.user(content));
             }
         }
-        AiService.HelpTurn t = ai.helpChat(String.valueOf(req.message()), history, req.page(), req.pageContext(), current.id());
+        String policyContext = policies.helpContext(current.id());
+        AiService.HelpTurn t = ai.helpChat(String.valueOf(req.message()), history, req.page(),
+                req.pageContext(), policyContext, current.id());
         return Map.of("reply", t.reply(), "interactionId", t.interactionId(), "modelLive", ai.modelIsLive());
     }
 

@@ -269,7 +269,14 @@ public final class PageDocs {
             "workflows" (MANAGE_WORKFLOWS only; JSON state machines, Publishing; in-flight instances
             unaffected); "dimensions" access dimensions; "scopes" approver scopes (constraints JSON per
             dimension); "grants" direct access grants; "review-rules" the AI review checklist used by
-            document review (code, instruction, severity, active).
+            document review (code, instruction, severity, active);
+            "policies" Policies & procedures — upload a Word/HTML/txt policy document (or paste its
+            text); tick the roles / countries / regions it applies to (untick all = everyone on
+            that dimension) and a "Confidential" toggle. The floating help assistant reads these
+            documents and answers policy/procedure questions from them, but only the ones matching
+            the asking user's role, country (from their default entity), region and — for
+            confidential documents — broad access (ADMIN / general counsel). Deactivate a row to
+            take it out of the assistant's knowledge without deleting it.
             """);
         add("/login", """
             LOGIN (/login) — email/password sign-in plus a clickable demo-account list for the demo
@@ -291,6 +298,14 @@ public final class PageDocs {
     public static String features() {
         return """
             CROSS-CUTTING FEATURES (available across pages, not tied to one route):
+
+            HELP ASSISTANT KNOWLEDGE — besides how-to guidance, the floating help chat can answer
+            questions about the organisation's own CLM policies and procedures. Admins upload those
+            documents under Administration → "Policies & procedures" and tag each with the roles /
+            countries / regions it applies to and whether it is confidential. Each user's help chat
+            only sees the documents that match their role, their country/region (from their default
+            legal entity) and — for confidential ones — broad access. If no policy covers a
+            question the assistant says so rather than guessing.
 
             AGENT COLLABORATION / "AGENT TALK" — each participant on a contract can have a personal
             AI agent that takes part in that contract's Discussion threads, speaking AS that person

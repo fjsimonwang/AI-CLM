@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router-dom";
-import { usePerms } from "../api";
+import { useQuery } from "@tanstack/react-query";
+import { api, usePerms } from "../api";
 import { adminTabs } from "../components/Layout";
 import { Icon } from "../components/icons";
 import { AdminCrud, FieldDef } from "../components/AdminCrud";
@@ -26,6 +27,16 @@ export default function Admin() {
   const [sp, setSp] = useSearchParams();
   const tab = adminTabs(can).some((t) => t.key === sp.get("tab")) ? sp.get("tab")! : "entities";
   const go = (t: string) => setSp({ tab: t });
+
+  // countries in use, for the policy-document audience picker
+  const entitiesQ = useQuery({
+    queryKey: ["refdata-entities"],
+    queryFn: () => api("/refdata/entities") as Promise<any[]>,
+    enabled: tab === "policies",
+  });
+  const countryOpts = Array.from(
+    new Set((entitiesQ.data || []).map((e: any) => String(e.countryCode || "").toUpperCase()).filter(Boolean)),
+  ).sort().map((c) => ({ value: c, label: c }));
 
   return (
     <div className="space-y-4">
@@ -459,6 +470,47 @@ export default function Admin() {
             { key: "severity", label: "Severity", type: "select", options: ["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((s) => ({ value: s, label: s })) },
             { key: "isActive", label: "Active", type: "boolean" },
             { key: "sort", label: "Sort order", type: "number" },
+          ]}
+        />
+      )}
+
+      {tab === "policies" && (
+        <AdminCrud
+          title="Policies & procedures"
+          description="Upload the organisation's CLM policy and procedure documents. The floating help assistant answers policy questions from them — but each user only sees the documents matching their role, country/region and clearance."
+          listUrl="/admin/policies"
+          saveUrl="/admin/policies"
+          deleteUrl="/admin/policies"
+          detailUrl="/admin/policies"
+          columns={[
+            { key: "title", label: "Title" },
+            { key: "audience", label: "Audience" },
+            { key: "confidential", label: "Confidential" },
+            { key: "isActive", label: "Active" },
+          ]}
+          fields={[
+            { key: "title", label: "Title", required: true },
+            {
+              key: "bodyHtml", label: "Document", type: "html-upload", uploadUrl: "/admin/upload-doc",
+              help: "Upload a Word (.docx), .html or .txt policy document, or paste its text. This is what the assistant reads.",
+            },
+            {
+              key: "roles", label: "Applies to roles", type: "multiselect", options: ROLES,
+              emptyLabel: "All roles", help: "Tick one or more. Leave all unticked to make it available to every role.",
+            },
+            {
+              key: "countries", label: "Applies in countries", type: "multiselect", options: countryOpts,
+              emptyLabel: "All countries", help: "Matched against the user's default legal entity country.",
+            },
+            {
+              key: "regions", label: "Applies in regions", type: "multiselect", options: REGIONS,
+              emptyLabel: "All regions",
+            },
+            {
+              key: "confidential", label: "Confidential", type: "boolean",
+              help: "When yes, only broad-access users (admins / general counsel) can see it in the help chat.",
+            },
+            { key: "isActive", label: "Active", type: "boolean" },
           ]}
         />
       )}
