@@ -69,6 +69,9 @@ public final class PageDocs {
             """);
         add("/intake", """
             NEW REQUEST / INTAKE (/intake) — conversational contract intake. Two-column split pane.
+            Arriving here via "Revise & resubmit" on a rejected request loads that request's saved
+            session instead of a fresh one, with a red "Revising a returned request" banner showing
+            why it was sent back; edits + regenerate + resubmit update the same contract.
             LEFT: chat "New request — describe what you need in plain language". AI replies stream
             token by token. Under the latest AI question there are quick-answer chips ("Send N answers"
             composes them). Header buttons: "Save draft"/"Saved", "Drafts (N)" (opens a drafts drawer —
@@ -107,8 +110,13 @@ public final class PageDocs {
             Requestor actions: on a plain DRAFT — "Submit for approval" and "Cancel request"
             (→ CANCELLED); on a DRAFT that an approver rejected (shows a red "This request was
             rejected" banner with the reason) — "Revise & resubmit" and "Close request"
-            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". Cancelled and closed contracts
-            are terminal — they can't be resubmitted and stop appearing in dashboard open items.
+            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". "Revise & resubmit" reopens the
+            request's intake session and takes you to the New request page with the conversation
+            and form loaded, so you can edit the details and resubmit — it updates the SAME
+            contract (keeps its number, bumps a draft version), it does not create a new one.
+            "Cancel request", "Close request" and "Recall to draft" each ask for confirmation.
+            Cancelled and closed contracts are terminal — they can't be resubmitted and stop
+            appearing in dashboard open items.
             When the current workflow task is
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.

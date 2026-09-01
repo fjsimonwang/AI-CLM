@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { api, apiBlob, money, date, usePerms, useAuth } from "../api";
 import { Card, SectionTitle, Badge, Spinner, Empty, Tabs, statusTone, riskTone, Confidence, DecisionDialog } from "../components/ui";
 import { BriefingCard } from "../components/BriefingCard";
@@ -46,6 +46,7 @@ const renderSummaryWithSession = (summary: string, sessionId: string) => {
 export default function ContractDetail() {
   const { id } = useParams();
   const location = useLocation();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const can = usePerms();
   const [justSubmitted, setJustSubmitted] = useState(() => !!(location.state as any)?.justSubmitted);
@@ -59,7 +60,7 @@ export default function ContractDetail() {
   const initialTab = new URLSearchParams(location.search).get("tab");
   const [tab, setTab] = useState(initialTab && validTabs.includes(initialTab) ? initialTab : "overview");
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
-  const [lifecycle, setLifecycle] = useState<null | "cancel" | "close">(null);
+  const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
@@ -131,6 +132,13 @@ export default function ContractDetail() {
       qc.invalidateQueries({ queryKey: ["contracts"] });
       qc.invalidateQueries({ queryKey: ["me-summary"] });
     },
+  });
+  const revise = useMutation({
+    mutationFn: () => api(`/intake/revise/${id}`, { method: "POST" }),
+    onSuccess: (s: any) =>
+      nav("/intake", {
+        state: { reviseSessionId: s.id, reviseContractId: id, reviseReason: (c.data as any)?.rejectionReason },
+      }),
   });
   const actOnTask = useMutation({
     mutationFn: (p: { taskId: string; event: string; comment?: string }) =>
@@ -232,11 +240,13 @@ export default function ContractDetail() {
         >
           <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-medium">
-              {lifecycle === "close" ? "Close" : "Cancel"} <b>{d.contractNumber}</b>?
+              {lifecycle === "close" ? "Close" : lifecycle === "recall" ? "Recall" : "Cancel"} <b>{d.contractNumber}</b>?
             </h2>
             <p className="text-sm text-ink-soft mt-2 leading-relaxed">
               {lifecycle === "close"
                 ? "This closes the rejected request for good. It stays on record as closed but no longer needs action and can't be resubmitted."
+                : lifecycle === "recall"
+                ? "This pulls the request out of approval and back to draft. The current approval task is cancelled; you can edit and resubmit when ready."
                 : "This abandons the draft request. It stays on record as cancelled and can't be resubmitted."}
             </p>
             {(setStatus.error as any)?.message && (
@@ -246,11 +256,21 @@ export default function ContractDetail() {
               <button className="btn" onClick={() => setLifecycle(null)}>Go back</button>
               <button
                 className="btn btn-primary"
-                style={{ background: "var(--risk)", borderColor: "var(--risk)" }}
+                style={lifecycle === "recall" ? {} : { background: "var(--risk)", borderColor: "var(--risk)" }}
                 disabled={setStatus.isPending}
-                onClick={() => setStatus.mutate(lifecycle === "close" ? "CLOSED_REJECTED" : "CANCELLED")}
+                onClick={() =>
+                  setStatus.mutate(
+                    lifecycle === "close" ? "CLOSED_REJECTED" : lifecycle === "recall" ? "DRAFT" : "CANCELLED",
+                  )
+                }
               >
-                {setStatus.isPending ? "Working…" : lifecycle === "close" ? "Close request" : "Cancel request"}
+                {setStatus.isPending
+                  ? "Working…"
+                  : lifecycle === "close"
+                  ? "Close request"
+                  : lifecycle === "recall"
+                  ? "Recall to draft"
+                  : "Cancel request"}
               </button>
             </div>
           </div>
@@ -380,7 +400,12 @@ export default function ContractDetail() {
         </div>
         {isRequestor && (
           <div className="flex gap-2 shrink-0 flex-wrap justify-end">
-            {d.status === "DRAFT" && (
+            {d.status === "DRAFT" && d.rejectionReason && d.intakeSessionId && (
+              <button className="btn btn-primary" disabled={revise.isPending} onClick={() => revise.mutate()}>
+                {revise.isPending ? "Opening…" : "Revise & resubmit"}
+              </button>
+            )}
+            {d.status === "DRAFT" && !(d.rejectionReason && d.intakeSessionId) && (
               <button className="btn btn-primary" disabled={checking || startWf.isPending} onClick={beginSubmit}>
                 {d.rejectionReason ? "Revise & resubmit" : "Submit for approval"}
               </button>
@@ -405,7 +430,11 @@ export default function ContractDetail() {
               </button>
             )}
             {d.status === "IN_REVIEW" && (
-              <button className="btn" disabled={setStatus.isPending} onClick={() => setStatus.mutate("DRAFT")}>
+              <button
+                className="btn"
+                disabled={setStatus.isPending}
+                onClick={() => { setStatus.reset(); setLifecycle("recall"); }}
+              >
                 Recall to draft
               </button>
             )}

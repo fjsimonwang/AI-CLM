@@ -349,6 +349,36 @@ public class IntakeService {
         return view(s);
     }
 
+    /**
+     * Reopen the intake session behind a rejected contract so the requester can revise the request
+     * in the intake workspace and resubmit. The session keeps its {@code resultingContractId}, so
+     * the eventual resubmit patches that same contract (see {@link #createContract}).
+     */
+    @Transactional
+    public Map<String, Object> reopenForRevision(UUID contractId, UUID userId) {
+        Contract c = contracts.findById(contractId)
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("Contract not found"));
+        if (!userId.equals(c.ownerUserId) && !userId.equals(c.createdBy)) {
+            throw new ApiExceptions.ForbiddenException("Only the requester can revise this request.");
+        }
+        if (!"DRAFT".equals(c.status) || c.rejectionReason == null) {
+            throw new ApiExceptions.BadRequestException("Only a rejected request can be revised.");
+        }
+        if (c.intakeSessionId == null) {
+            throw new ApiExceptions.BadRequestException("This contract was not created through intake.");
+        }
+        IntakeSession s = sessions.findById(c.intakeSessionId)
+                .orElseThrow(() -> new ApiExceptions.NotFoundException("Intake session not found"));
+        s.status = "OPEN";
+        s.saved = true;
+        if (s.requestNumber == null) s.requestNumber = nextRequestNumber();
+        s.updatedAt = Instant.now();
+        sessions.save(s);
+        audit.record("INTAKE_SESSION", s.id.toString(), "REOPENED_FOR_REVISION", userId, null,
+                Map.of("contractId", contractId.toString()));
+        return view(s);
+    }
+
     @Transactional
     public void delete(UUID id, UUID userId) {
         IntakeSession s = sessions.findById(id)
@@ -572,12 +602,17 @@ public class IntakeService {
                 relationship,
                 participantIds);
 
-        Map<String, Object> contract = contractService.create(req, userId);
+        // A reopened session that already produced a contract is a REVISION (requester revising a
+        // rejected request) — patch the existing draft rather than creating a second contract.
+        boolean revising = s.resultingContractId != null;
+        Map<String, Object> contract = revising
+                ? contractService.updateFromIntake(s.resultingContractId, req, userId)
+                : contractService.create(req, userId);
         UUID contractId = UUID.fromString(String.valueOf(contract.get("id")));
 
-        carryAttachmentsToContract(s, contractId, userId);
+        if (!revising) carryAttachmentsToContract(s, contractId, userId); // already carried on first submit
 
-        if (s.paperBodyHtml != null && !s.paperBodyHtml.isBlank()) {
+        if (!revising && s.paperBodyHtml != null && !s.paperBodyHtml.isBlank()) {
             // document is the verbatim third-party paper — mark migrated so it stays read-only
             Contract c = contracts.findById(contractId).orElseThrow();
             c.source = "MIGRATED";
