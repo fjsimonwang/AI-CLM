@@ -50,12 +50,10 @@ export default function ContractDetail() {
   const qc = useQueryClient();
   const can = usePerms();
   const [justSubmitted, setJustSubmitted] = useState(() => !!(location.state as any)?.justSubmitted);
-  // Where the "back" link points — set by the page that linked here (e.g. Approvals) so the
-  // user returns where they came from rather than always to the contract register.
-  const backTo =
-    (location.state as any)?.from === "approvals"
-      ? { to: "/approvals", label: "Approvals" }
-      : { to: "/contracts", label: "Contracts" };
+  // "Back" returns to wherever the user came from (browser history). If they landed here directly
+  // (fresh tab, bookmark, deep link) there is no in-app history, so fall back to the register.
+  const canGoBack = location.key !== "default";
+  const goBack = () => (canGoBack ? nav(-1) : nav("/contracts"));
   const validTabs = ["overview", "terms", "document", "workflow", "obligations", "relations", "risks", "audit"];
   const initialTab = new URLSearchParams(location.search).get("tab");
   const [tab, setTab] = useState(initialTab && validTabs.includes(initialTab) ? initialTab : "overview");
@@ -442,9 +440,9 @@ export default function ContractDetail() {
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <Link to={backTo.to} className="link text-sm flex items-center gap-1">
-            <Icon.chevronLeft width={14} height={14} /> {backTo.label}
-          </Link>
+          <button type="button" onClick={goBack} className="link text-sm flex items-center gap-1">
+            <Icon.chevronLeft width={14} height={14} /> Back
+          </button>
           <h1 className="text-xl font-medium mt-1">{d.title}</h1>
           <div className="text-sm text-ink-faint flex flex-wrap items-center gap-2 mt-1">
             <span className="tabular">{d.contractNumber}</span>
