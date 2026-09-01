@@ -56,9 +56,18 @@ export default function ContractDetail() {
     (location.state as any)?.from === "approvals"
       ? { to: "/approvals", label: "Approvals" }
       : { to: "/contracts", label: "Contracts" };
-  const validTabs = ["overview", "terms", "document", "discussion", "workflow", "obligations", "relations", "risks", "audit"];
+  const validTabs = ["overview", "terms", "document", "workflow", "obligations", "relations", "risks", "audit"];
   const initialTab = new URLSearchParams(location.search).get("tab");
   const [tab, setTab] = useState(initialTab && validTabs.includes(initialTab) ? initialTab : "overview");
+  // Discussion lives in a persistent left side panel, not a tab. `?tab=discussion` opens it.
+  const [discussionOpen, setDiscussionOpen] = useState(() => {
+    if (initialTab === "discussion") return true;
+    try { return localStorage.getItem("clm-contract-discussion") !== "0"; } catch { return true; }
+  });
+  const toggleDiscussion = (v: boolean) => {
+    setDiscussionOpen(v);
+    try { localStorage.setItem("clm-contract-discussion", v ? "1" : "0"); } catch { /* ignore */ }
+  };
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
   const [recordOpen, setRecordOpen] = useState(true);
@@ -527,27 +536,63 @@ export default function ContractDetail() {
         )}
       </Card>
 
-      <Tabs
-        tabs={[
-          { key: "overview", label: "Overview" },
-          { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
-          { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
-          { key: "discussion", label: "Discussion", count: d.discussionCount ?? 0 },
-          { key: "workflow", label: "Workflow" },
-          { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
-          { key: "relations", label: "Relations", count:
-              (relations.data?.relations?.length ?? 0)
-              + (d.parentContractId ? 1 : 0)
-              + (d.children || []).length },
-          { key: "risks", label: "Risks", count: (risks.data || []).filter((r: any) => r.status === "OPEN").length },
-          { key: "audit", label: "Audit trail" },
-        ]}
-        active={tab}
-        onChange={(t) => {
-          setTab(t);
-          setRecordOpen(false);
-        }}
-      />
+      <div className="lg:flex lg:gap-4 lg:items-start">
+        <aside
+          className={`order-last lg:order-first mt-4 lg:mt-0 lg:sticky lg:top-4 ${
+            discussionOpen ? "lg:w-[350px] lg:shrink-0" : "hidden"
+          }`}
+        >
+          <Card className="!p-0 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+              <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5">
+                <Icon.message width={14} height={14} /> Discussion
+                {d.discussionCount ? <span className="text-ink-faint">({d.discussionCount})</span> : null}
+              </span>
+              <button
+                className="btn !p-1 !border-0"
+                title="Hide discussion panel"
+                onClick={() => toggleDiscussion(false)}
+              >
+                <Icon.x width={14} height={14} />
+              </button>
+            </div>
+            <div className="p-3 lg:max-h-[calc(100vh-200px)] overflow-y-auto">
+              <CommentThreads entityType="CONTRACT" entityId={id!} />
+            </div>
+          </Card>
+        </aside>
+
+        <div className="min-w-0 lg:flex-1 space-y-4">
+          {!discussionOpen && (
+            <button
+              className="btn"
+              style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+              onClick={() => toggleDiscussion(true)}
+            >
+              <Icon.message width={13} height={13} /> Show discussion
+              {d.discussionCount ? ` (${d.discussionCount})` : ""}
+            </button>
+          )}
+          <Tabs
+            tabs={[
+              { key: "overview", label: "Overview" },
+              { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
+              { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
+              { key: "workflow", label: "Workflow" },
+              { key: "obligations", label: "Obligations", count: (d.obligations || []).length },
+              { key: "relations", label: "Relations", count:
+                  (relations.data?.relations?.length ?? 0)
+                  + (d.parentContractId ? 1 : 0)
+                  + (d.children || []).length },
+              { key: "risks", label: "Risks", count: (risks.data || []).filter((r: any) => r.status === "OPEN").length },
+              { key: "audit", label: "Audit trail" },
+            ]}
+            active={tab}
+            onChange={(t) => {
+              setTab(t);
+              setRecordOpen(false);
+            }}
+          />
 
       {tab === "overview" && (
         <div className="space-y-4 fade-in">
@@ -707,12 +752,6 @@ export default function ContractDetail() {
           </div>
           <div className="min-w-0 lg:h-full lg:overflow-y-auto"><AiReviewPanel contractId={id!} /></div>
         </div>
-        </div>
-      )}
-
-      {tab === "discussion" && (
-        <div className="fade-in">
-          <CommentThreads entityType="CONTRACT" entityId={id!} />
         </div>
       )}
 
@@ -992,6 +1031,8 @@ export default function ContractDetail() {
           )}
         </Card>
       )}
+        </div>
+      </div>
 
       {(checking || qcError || quickCheck) && (
         <div className="fixed inset-0 z-50 grid place-items-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
