@@ -100,18 +100,23 @@ function WorkflowProgress({
     const pendingWho = pendingTask
       ? pendingTask.assignee || pendingTask.roleLabel || null
       : null;
-    steps = order.map((s: any, i: number) => {
-      let state: StepState = "todo";
-      if (executed) state = "done";
-      else if (s.key === curKey && wf.status === "RUNNING") state = "current";
-      else if (doneStates.has(s.key) || (curIdx >= 0 && i < curIdx)) state = "done";
-      return {
-        key: s.key,
-        label: wfLabel(s.key),
-        state,
-        pending: state === "current" && pendingWho ? pendingWho : undefined,
-      };
-    });
+    // the requestor's submission is always the first step of the flow (a running or completed
+    // workflow means the request was submitted)
+    steps = [
+      { key: "submitted", label: "Submitted", state: "done" as StepState },
+      ...order.map((s: any, i: number) => {
+        let state: StepState = "todo";
+        if (executed) state = "done";
+        else if (s.key === curKey && wf.status === "RUNNING") state = "current";
+        else if (doneStates.has(s.key) || (curIdx >= 0 && i < curIdx)) state = "done";
+        return {
+          key: s.key,
+          label: wfLabel(s.key),
+          state,
+          pending: state === "current" && pendingWho ? pendingWho : undefined,
+        };
+      }),
+    ];
   } else {
     const returned = contractStatus === "DRAFT" && !!rejectionReason;
     if (contractStatus === "CANCELLED") {
@@ -128,14 +133,16 @@ function WorkflowProgress({
       ];
       note = { text: "Rejected in approval and closed by the requestor.", tone: "risk" };
     } else {
-      const idx = contractStatus === "EXECUTED" ? 2 : contractStatus === "IN_REVIEW" ? 1 : 0;
+      // Draft -> Submitted -> In review -> Executed
+      const idx = contractStatus === "EXECUTED" ? 3 : contractStatus === "IN_REVIEW" ? 2 : 0;
       steps = [
         { key: "draft", label: "Draft" },
+        { key: "submitted", label: "Submitted" },
         { key: "review", label: "In review" },
         { key: "executed", label: "Executed" },
       ].map((s, i) => ({
         ...s,
-        state: (idx === 2 ? "done" : i < idx ? "done" : i === idx ? "current" : "todo") as StepState,
+        state: (idx === 3 ? "done" : i < idx ? "done" : i === idx ? "current" : "todo") as StepState,
       }));
       if (returned)
         note = {

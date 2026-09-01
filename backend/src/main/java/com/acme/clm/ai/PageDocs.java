@@ -128,14 +128,15 @@ public final class PageDocs {
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
             FLOW PROGRESS BAR: directly under the header, above the "AI summary & briefing" card, a
-            horizontal step bar shows where the contract is. When an approval workflow is running it
-            shows that workflow's own steps (e.g. Manager approval → Signature → Executed, or the
-            Legal review chain) with the current step marked "In progress" and, under it,
-            "Pending: <who>" — the individual it is assigned to, or the team/role name (e.g. "Legal
-            team") when it is not yet with a named person. Finished steps are ticked, and the live
-            contract status badge is shown. With no workflow yet it shows the generic lifecycle
-            (Draft → In review → Executed); a returned/rejected, cancelled or closed request is
-            called out on the bar too.
+            horizontal step bar shows where the contract is. It always starts from the requestor's
+            "Submitted" step. When an approval workflow is running it then shows that workflow's own
+            steps (e.g. Submitted → Manager approval → Signature → Executed, or the Legal review
+            chain) with the current step marked "In progress" and, under it, "Pending: <who>" — the
+            individual it is assigned to, or the team/role name (e.g. "Legal team") when it is not
+            yet with a named person. Finished steps are ticked, and the live contract status badge
+            is shown. With no workflow yet it shows the generic lifecycle
+            (Draft → Submitted → In review → Executed); a returned/rejected, cancelled or closed
+            request is called out on the bar too.
             An "AI summary & briefing" card sits under it (collapsible; can regenerate the
             approver briefing).
             DISCUSSION PANEL: comment threads live in a DRAGGABLE panel (not a tab). By default it
