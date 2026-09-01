@@ -305,6 +305,8 @@ public final class PageDocs {
               switching to "An agent is replying" once an agent message lands; the reply is tagged
               "<Name> (agent)" with violet styling. Posting a new thread with Agent talk on triggers
               the same auto-answer without the "✦ Ask agent" click.
+            - Runs in the background: the agents work server-side, so the replies still land in the
+              thread even if you navigate away — reopen the contract and they will be there.
             - Back-and-forth: for a targeted question, if the asker also has their agent enabled,
               the asker's agent may auto-review the answer and post one follow-up question; the
               target agent answers once more (bounded — it stops after a couple of exchanges).

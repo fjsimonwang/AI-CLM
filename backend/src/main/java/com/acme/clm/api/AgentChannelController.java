@@ -17,6 +17,8 @@ import java.util.*;
 import jakarta.annotation.PreDestroy;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,6 +31,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/agent-channel")
 @PreAuthorize("hasAuthority('PERM_COMMENT')")
 public class AgentChannelController {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentChannelController.class);
 
     private final Repos.Contracts contracts;
     private final Repos.CommentThreads threads;
@@ -158,31 +162,52 @@ public class AgentChannelController {
                     "No other participant's agent is available to answer (agents need contract access and their user's opt-in).");
         }
 
-        String askerName = userName(me);
-
-        // the agents now ACT on behalf of their humans: the selected/routed agent answers, then the
-        // asker's own agent reviews and may clarify back and forth — bounded so it always ends.
+        // The agents ACT on behalf of their humans: the selected/routed agent answers, then the
+        // asker's own agent may review and clarify back and forth — bounded so it always ends.
+        // This runs on a background executor so it keeps going (and the replies still land in the
+        // thread) even if the asker navigates away; the client polls the thread for the results.
         boolean dialogue = reps.size() == 1 && optIn(me) && !me.equals(reps.get(0).userId);
+        final UUID threadId = t.id;
+        final List<UUID> repIds = reps.stream().map(a -> a.userId).toList();
+        autoAnswerExec.submit(() -> {
+            autoInFlight.incrementAndGet();
+            try {
+                runAsk(contractId, threadId, me, question, repIds, dialogue);
+            } catch (Exception e) {
+                log.warn("Async agent ask failed for contract {}: {}", contractId, e.toString());
+            } finally {
+                autoInFlight.decrementAndGet();
+            }
+        });
+        return comments.threadView(t);
+    }
+
+    /** Background worker for {@link #ask}: re-loads the entities in this thread and runs each
+     *  chosen representative's agent. Failures are best-effort — the question is already saved. */
+    private void runAsk(UUID contractId, UUID threadId, UUID askerId, String question,
+                        List<UUID> repIds, boolean dialogue) {
+        Contract c = contracts.findById(contractId).orElse(null);
+        CommentThread t = threads.findById(threadId).orElse(null);
+        if (c == null || t == null) return;
+        List<ParticipantAgent> pool = candidatePool(c);
+        String askerName = userName(askerId);
         List<Map<String, Object>> turns = new ArrayList<>();
         List<String> failed = new ArrayList<>();
-        for (ParticipantAgent rep : reps) {
+        for (UUID repId : repIds) {
+            ParticipantAgent rep = pool.stream().filter(a -> a.userId.equals(repId)).findFirst().orElse(null);
+            if (rep == null) continue;
             try {
-                talk(c, t, me, dialogue, question, rep, askerName, turns);
+                talk(c, t, askerId, dialogue, question, rep, askerName, turns);
             } catch (Exception e) {
                 failed.add(rep.name);
             }
         }
         Map<String, Object> auditAfter = new LinkedHashMap<>();
-        auditAfter.put("threadId", t.id.toString());
+        auditAfter.put("threadId", threadId.toString());
         auditAfter.put("question", question);
         auditAfter.put("turns", turns);
         if (!failed.isEmpty()) auditAfter.put("failedFor", failed);
-        audit.record("CONTRACT", contractId.toString(), "AGENT_CHANNEL_MESSAGE", me, null, auditAfter);
-        if (turns.isEmpty()) {
-            throw new ApiExceptions.ServiceUnavailableException(
-                    "The agents could not answer right now — your question is saved in the thread; try again shortly.");
-        }
-        return comments.threadView(t);
+        audit.record("CONTRACT", contractId.toString(), "AGENT_CHANNEL_MESSAGE", askerId, null, auditAfter);
     }
 
     /**
