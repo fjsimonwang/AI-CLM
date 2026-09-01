@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { api, apiBlob, money, date, usePerms, useAuth } from "../api";
@@ -68,33 +68,46 @@ export default function ContractDetail() {
     setDiscussionOpen(v);
     try { localStorage.setItem("clm-contract-discussion", v ? "1" : "0"); } catch { /* ignore */ }
   };
-  // The docked discussion panel aligns its top and height with the tab-content area.
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [anchor, setAnchor] = useState<{ top: number; height: number }>({ top: 160, height: 600 });
-  const measureContent = () => {
-    const el = contentRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const top = Math.max(8, Math.round(r.top));
-    const height = Math.round(r.height);
-    setAnchor((a) => (Math.abs(a.top - top) > 1 || Math.abs(a.height - height) > 1 ? { top, height } : a));
+  // The discussion panel is DOCKED (a left column, full viewport-height, sticky) by default.
+  // Dragging its header detaches it to a free-floating position; "Dock" snaps it back.
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number; h: number } | null>(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("clm-discussion-pos") || "");
+      if (s && typeof s.x === "number" && typeof s.y === "number" && typeof s.h === "number") return s;
+    } catch { /* docked */ }
+    return null;
+  });
+  const dockPanel = () => {
+    setPanelPos(null);
+    try { localStorage.removeItem("clm-discussion-pos"); } catch { /* ignore */ }
   };
-  // Keep the docked panel aligned with the content as it grows (queries + briefing resolve
-  // async): measure after every commit, on any size change of the content box, on delayed
-  // passes for late shifts, and on window resize.
-  useLayoutEffect(measureContent);
-  useEffect(() => {
-    const el = contentRef.current;
-    const ro = el && "ResizeObserver" in window ? new ResizeObserver(() => measureContent()) : null;
-    if (el && ro) ro.observe(el);
-    const timers = [150, 500, 1200, 2500].map((ms) => window.setTimeout(measureContent, ms));
-    window.addEventListener("resize", measureContent);
-    return () => {
-      ro?.disconnect();
-      timers.forEach(window.clearTimeout);
-      window.removeEventListener("resize", measureContent);
+  const startPanelDrag = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    const card = (e.currentTarget as HTMLElement).closest("[data-discussion-card]") as HTMLElement | null;
+    const r = card?.getBoundingClientRect();
+    const start = {
+      mx: e.clientX, my: e.clientY,
+      x: r?.left ?? 12, y: r?.top ?? 12, h: Math.round(r?.height ?? 500),
     };
-  }, []);
+    document.body.style.userSelect = "none";
+    const move = (ev: MouseEvent) => {
+      const x = Math.max(0, Math.min(window.innerWidth - 300, start.x + ev.clientX - start.mx));
+      const y = Math.max(8, Math.min(window.innerHeight - 200, start.y + ev.clientY - start.my));
+      setPanelPos({ x, y, h: start.h });
+    };
+    const up = () => {
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      setPanelPos((p) => {
+        if (p) { try { localStorage.setItem("clm-discussion-pos", JSON.stringify(p)); } catch { /* ignore */ } }
+        return p;
+      });
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
   const [recordOpen, setRecordOpen] = useState(true);
@@ -574,28 +587,42 @@ export default function ContractDetail() {
         )}
       </Card>
 
-      {discussionOpen ? (
-        <FloatingDiscussion
+      {discussionOpen && panelPos && (
+        <DiscussionCard
           entityId={id!}
           count={d.discussionCount}
-          anchorTop={anchor.top}
-          anchorHeight={anchor.height}
           onClose={() => toggleDiscussion(false)}
+          onGrab={startPanelDrag}
+          onDock={dockPanel}
+          style={{ position: "fixed", zIndex: 40, left: panelPos.x, top: panelPos.y, width: 340, height: panelPos.h }}
         />
-      ) : (
-        <button
-          className="btn"
-          style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
-          onClick={() => toggleDiscussion(true)}
-        >
-          <Icon.message width={13} height={13} /> Show discussion
-          {d.discussionCount ? ` (${d.discussionCount})` : ""}
-        </button>
       )}
 
-      <div ref={contentRef} className="space-y-4">
-      <Tabs
-        tabs={[
+      <div className="lg:flex lg:gap-3 lg:items-start">
+        {discussionOpen && !panelPos && (
+          <aside className="lg:w-[340px] lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:h-[calc(100vh-1.5rem)] max-lg:mb-4">
+            <DiscussionCard
+              entityId={id!}
+              count={d.discussionCount}
+              onClose={() => toggleDiscussion(false)}
+              onGrab={startPanelDrag}
+              docked
+            />
+          </aside>
+        )}
+        <div className="min-w-0 lg:flex-1 space-y-4">
+          {!discussionOpen && (
+            <button
+              className="btn"
+              style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+              onClick={() => toggleDiscussion(true)}
+            >
+              <Icon.message width={13} height={13} /> Show discussion
+              {d.discussionCount ? ` (${d.discussionCount})` : ""}
+            </button>
+          )}
+          <Tabs
+            tabs={[
           { key: "overview", label: "Overview" },
           { key: "terms", label: "Key terms", count: (d.effectiveTerms || []).length },
           { key: "document", label: "Document", count: d.documentCount ?? (d.versions || []).length },
@@ -1052,6 +1079,7 @@ export default function ContractDetail() {
           )}
         </Card>
       )}
+        </div>
       </div>
 
       {(checking || qcError || quickCheck) && (
@@ -1129,86 +1157,49 @@ export default function ContractDetail() {
 }
 
 /**
- * Floating, draggable discussion panel. By default it is DOCKED to the left, its top and height
- * matching the tab-content area (Overview). Drag the header to detach it and move it anywhere;
- * "Dock" (shown once moved) snaps it back. Custom position + size persist per browser.
+ * The discussion panel. Rendered inside a sticky full-height left column when docked (default),
+ * or as a free-floating fixed box once dragged (`style` supplied + `onDock` shown).
  */
-function FloatingDiscussion({
+function DiscussionCard({
   entityId,
   count,
-  anchorTop,
-  anchorHeight,
   onClose,
+  onGrab,
+  onDock,
+  docked,
+  style,
 }: {
   entityId: string;
   count?: number;
-  anchorTop: number;
-  anchorHeight: number;
   onClose: () => void;
+  onGrab: (e: React.MouseEvent) => void;
+  onDock?: () => void;
+  docked?: boolean;
+  style?: React.CSSProperties;
 }) {
-  const [pos, setPos] = useState<{ x: number; y: number; h: number } | null>(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem("clm-discussion-pos") || "");
-      if (s && typeof s.x === "number" && typeof s.y === "number" && typeof s.h === "number") return s;
-    } catch { /* docked */ }
-    return null;
-  });
-  const dragRef = useRef<{ dx: number; dy: number; h: number } | null>(null);
-
-  const vh = window.innerHeight || document.documentElement.clientHeight || 800;
-  const dockedTop = Math.max(8, anchorTop);
-  const dockedHeight = Math.max(320, Math.min(anchorHeight || 600, vh - dockedTop - 12));
-  const box = pos ?? { x: 12, y: dockedTop, h: dockedHeight };
-
-  function onDragStart(e: React.MouseEvent) {
-    if ((e.target as HTMLElement).closest("button")) return;
-    e.preventDefault();
-    dragRef.current = { dx: e.clientX - box.x, dy: e.clientY - box.y, h: box.h };
-    document.body.style.userSelect = "none";
-    const move = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const x = Math.max(0, Math.min(window.innerWidth - 300, ev.clientX - dragRef.current.dx));
-      const y = Math.max(8, Math.min(window.innerHeight - 200, ev.clientY - dragRef.current.dy));
-      setPos({ x, y, h: dragRef.current.h });
-    };
-    const up = () => {
-      dragRef.current = null;
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      setPos((p) => {
-        if (p) { try { localStorage.setItem("clm-discussion-pos", JSON.stringify(p)); } catch { /* ignore */ } }
-        return p;
-      });
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  }
-
-  function dock() {
-    setPos(null);
-    try { localStorage.removeItem("clm-discussion-pos"); } catch { /* ignore */ }
-  }
-
   return (
     <div
-      className="fixed z-40 w-[350px] max-w-[92vw] flex flex-col rounded-xl border border-border bg-surface shadow-2xl"
-      style={{ left: box.x, top: box.y, height: box.h }}
+      data-discussion-card
+      className={
+        "flex flex-col rounded-xl border border-border bg-surface " +
+        (docked ? "h-full shadow-sm" : "max-w-[92vw] shadow-2xl")
+      }
+      style={style}
     >
       <div
-        className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border cursor-move select-none rounded-t-xl"
+        className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border cursor-move select-none rounded-t-xl shrink-0"
         style={{ background: "var(--surface-2)" }}
-        onMouseDown={onDragStart}
-        title="Drag to move"
+        onMouseDown={onGrab}
+        title="Drag to detach / move"
       >
         <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5 min-w-0">
           <span aria-hidden className="tracking-[0.15em] text-ink-faint leading-none">⠿</span>
           <Icon.message width={14} height={14} /> Discussion
           {count ? <span className="text-ink-faint">({count})</span> : null}
         </span>
-        <span className="flex items-center gap-1 shrink-0">
-          {pos && (
-            <button className="text-xs link" title="Dock to the left" onClick={dock}>
+        <span className="flex items-center gap-1.5 shrink-0">
+          {onDock && (
+            <button className="text-xs link" title="Dock to the left" onClick={onDock}>
               Dock
             </button>
           )}
@@ -1217,7 +1208,7 @@ function FloatingDiscussion({
           </button>
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
         <CommentThreads entityType="CONTRACT" entityId={entityId} />
       </div>
     </div>
