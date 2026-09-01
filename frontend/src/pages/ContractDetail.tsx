@@ -234,8 +234,19 @@ export default function ContractDetail() {
   const user = useAuth((s) => s.user);
   const storedBriefing = (storedBriefings.data || {})[id || ""];
 
-  if (c.isLoading) return <Spinner label="Loading contract…" />;
-  if (c.isError) return <Empty>Contract not found.</Empty>;
+  // `!d && !isError` covers react-query's between-retries gap (isLoading briefly false while
+  // data is still undefined) — without this the render below would crash on `d.ownerUserId`.
+  if (c.isLoading || (!d && !c.isError)) return <Spinner label="Loading contract…" />;
+  if (c.isError || !d) {
+    const status = (c.error as any)?.status;
+    return (
+      <Empty>
+        {status === 403
+          ? "You don't have access to this contract. Request access from the Access screen."
+          : "Contract not found."}
+      </Empty>
+    );
+  }
 
   const canEdit = can("EDIT_CONTRACT");
   const isRequestor = !!user && (user.id === d.ownerUserId || user.id === (d as any).createdBy);
