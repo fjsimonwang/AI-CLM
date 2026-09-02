@@ -316,6 +316,7 @@ export default function ContractDetail() {
   };
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
+  const [signStep, setSignStep] = useState<null | "confirm" | "sent">(null);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
@@ -542,6 +543,72 @@ export default function ContractDetail() {
           </div>
         </div>
       )}
+      {signStep === "confirm" && activeTask && (
+        <div
+          className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(3px)" }}
+          onClick={() => setSignStep(null)}
+        >
+          <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-medium">Send <b>{d.contractNumber}</b> for signature?</h2>
+            <p className="text-sm text-ink-soft mt-2 leading-relaxed">
+              This sends the final document to the counterparty and signatories for electronic
+              signature. When all parties have signed, the contract becomes <b>Executed</b>.
+            </p>
+            {(actOnTask.error as any)?.message && (
+              <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{(actOnTask.error as any).message}</div>
+            )}
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn" onClick={() => setSignStep(null)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                disabled={actOnTask.isPending}
+                onClick={() =>
+                  actOnTask.mutate(
+                    { taskId: activeTask.id, event: "complete", comment: "Sent for e-signature completion." },
+                    { onSuccess: () => setSignStep("sent") },
+                  )
+                }
+              >
+                {actOnTask.isPending ? "Sending…" : "Send for signature"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {signStep === "sent" && (
+        <div
+          className="confirm-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(5px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSignStep(null); }}
+        >
+          <div className="confirm-card card w-full max-w-md p-8 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="relative mx-auto mb-4" style={{ width: 72, height: 72 }}>
+              <span
+                className="confirm-halo absolute inset-0 rounded-full"
+                style={{ background: "color-mix(in srgb, var(--ok) 35%, transparent)" }}
+              />
+              <svg className="confirm-check relative" viewBox="0 0 52 52" width={72} height={72}>
+                <circle cx="26" cy="26" r="24" fill="none" stroke="var(--ok)" strokeWidth="2.5" />
+                <path
+                  d="M15 27 l8 8 l15 -16"
+                  fill="none" stroke="var(--ok)" strokeWidth="3.5"
+                  strokeLinecap="round" strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h2 className="text-lg font-medium">Sent for e-signature</h2>
+            <p className="text-sm text-ink-soft mt-1">
+              <span className="font-medium tabular text-ink">{d.contractNumber}</span> has been sent to
+              the signatories to complete e-signature. All parties have signed and the contract is now{" "}
+              <b>Executed</b>.
+            </p>
+            <button className="btn btn-primary mt-5 w-full justify-center" onClick={() => setSignStep(null)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
       {justSubmitted && (
         <div
           className="confirm-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -725,6 +792,15 @@ export default function ContractDetail() {
                 onClick={() => { actOnTask.reset(); setDecision("reject"); }}
               >
                 Reject
+              </button>
+            )}
+            {wfData.availableEvents?.includes("complete") && (
+              <button
+                className="btn btn-primary"
+                disabled={actOnTask.isPending}
+                onClick={() => { actOnTask.reset(); setSignStep("confirm"); }}
+              >
+                Send for Signature
               </button>
             )}
           </div>

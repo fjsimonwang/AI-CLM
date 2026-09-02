@@ -124,6 +124,9 @@ public final class PageDocs {
             "Cancel request", "Close request" and "Recall to draft" each ask for confirmation.
             Cancelled and closed contracts are terminal — they can't be resubmitted and stop
             appearing in dashboard open items.
+            When the workflow reaches the signature step (assigned to the requestor), the header
+            shows "Send for Signature" — it confirms, then sends the document for e-signature and
+            moves the contract to EXECUTED.
             When the current workflow task is
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
