@@ -64,9 +64,10 @@ public final class PageDocs {
             a "Hidden sections" card can re-show them; edits auto-save (PUT /me/dashboard-config).
             AI: the "AI insight" section (collapsible, subtle styling — no flashing) shows a fast
             triage built ONLY from your open tasks and attention items: a short summary plus a few
-            ranked items. A "Deeper analysis" button runs the heavier review of your audit trail,
-            AI activity, risks and obligations ("What matters now", "Suspicious & worth checking",
-            "Suggested next actions") on demand.
+            ranked items. Any contract number mentioned in the insight text is a link straight to
+            that contract's page. A "Deeper analysis" button runs the heavier review of your audit
+            trail, AI activity, risks and obligations ("What matters now", "Suspicious & worth
+            checking", "Suggested next actions") on demand.
             No permission gates; data is access-filtered server-side.
             """);
         add("/intake", """
