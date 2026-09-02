@@ -88,7 +88,6 @@ export default function Intake() {
   const [confirmAction, setConfirmAction] = useState<"submit" | "cancel" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paperMode, setPaperMode] = useState(false); // 3rd-party paper upload flow
-  const [reviewCollapsed, setReviewCollapsed] = useState(false); // AI review panel fold on the review page
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -566,7 +565,7 @@ export default function Intake() {
     return (
       <>
       <div className="max-w-7xl mx-auto space-y-4 flex flex-col max-lg:h-auto lg:h-[calc(100vh-120px)]">
-        <div className={`grid gap-4 items-stretch flex-1 lg:min-h-0 transition-[grid-template-columns] duration-200 ${reviewCollapsed ? "lg:grid-cols-[minmax(0,1fr)_44px]" : "lg:grid-cols-[2fr_1fr]"}`}>
+        <div className="grid gap-4 items-stretch flex-1 lg:min-h-0 lg:grid-cols-[2fr_1fr]">
         <div className="min-w-0 flex flex-col gap-4 lg:h-full lg:min-h-0 lg:overflow-y-auto">
         <Card>
           <SectionTitle
@@ -664,8 +663,8 @@ export default function Intake() {
         )}
         <DocumentPanel contractId={result.contractId} fullPage />
         </div>
-        <div className={reviewCollapsed ? "min-w-0 lg:h-full" : "min-w-0 lg:h-full lg:min-h-0 lg:overflow-y-auto"}>
-          <AiReviewPanel contractId={result.contractId} collapsed={reviewCollapsed} onCollapsedChange={setReviewCollapsed} />
+        <div className="min-w-0 lg:h-full lg:min-h-0 lg:overflow-y-auto">
+          <AiReviewPanel contractId={result.contractId} />
         </div>
         </div>
       </div>

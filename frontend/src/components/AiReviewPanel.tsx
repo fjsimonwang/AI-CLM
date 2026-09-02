@@ -10,29 +10,13 @@ const sevTone = (s?: string) => riskTone(s);
 const sevRank = (s?: string) => (s === "CRITICAL" ? 4 : s === "HIGH" ? 3 : s === "MEDIUM" ? 2 : 1);
 const dedupe = (title: string) => (title || "").toLowerCase().replace(/\s+/g, " ").trim();
 
-export function AiReviewPanel({
-  contractId,
-  collapsed: collapsedProp,
-  onCollapsedChange,
-}: {
-  contractId: string;
-  collapsed?: boolean;
-  onCollapsedChange?: (v: boolean) => void;
-}) {
+export function AiReviewPanel({ contractId, bare = false }: { contractId: string; bare?: boolean }) {
   const can = usePerms();
   const qc = useQueryClient();
   const canPlaybook = can("EDIT_CONTRACT");
   const canClose = canPlaybook;
   const [selected, setSelected] = useState<string[]>([]);
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
-  const [collapsedInternal, setCollapsedInternal] = useState(false);
-  const controlled = onCollapsedChange !== undefined;
-  const collapsed = controlled ? !!collapsedProp : collapsedInternal;
-  const setCollapsed = (v: boolean | ((p: boolean) => boolean)) => {
-    const next = typeof v === "function" ? v(collapsed) : v;
-    if (controlled) onCollapsedChange!(next);
-    else setCollapsedInternal(next);
-  };
 
   const rules = useQuery({ queryKey: ["review-rules"], queryFn: () => api("/ai/review-rules") });
 
@@ -111,49 +95,15 @@ export function AiReviewPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editedSeq, run?.status, run?.createdAt]);
 
-  // Collapsed: a slim full-height rail on the right (folds sideways, like the sidebar) — click to expand.
-  if (collapsed) {
-    return (
-      <Card className="!p-0 lg:h-full overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          title="Expand AI document review"
-          className="w-full h-full min-h-[120px] flex flex-col items-center gap-3 py-3 hover:bg-surface-2 transition-colors"
-        >
-          <Icon.chevronLeft width={16} height={16} className="shrink-0 text-ink-faint" />
-          {hasResult && !running && findings.length > 0 && (
-            <Badge tone={critical > 0 ? "risk" : "warn"}>{findings.length}</Badge>
-          )}
-          {running && <span className="w-2 h-2 rounded-full bg-[color:var(--ai)] animate-pulse" />}
-          <span
-            className="text-[11px] font-medium text-ink-soft uppercase tracking-wide whitespace-nowrap"
-            style={{ writingMode: "vertical-rl" }}
-          >
-            AI document review
-          </span>
-        </button>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
+  const body = (
+    <>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <button
-          type="button"
-          onClick={() => setCollapsed(true)}
-          className="flex items-center gap-1.5 min-w-0"
-          title="Fold the AI document review panel"
-        >
-          <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI document review</h2>
-          <Icon.chevronRight width={15} height={15} className="text-ink-faint shrink-0" />
-        </button>
+        <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI document review</h2>
         <button
           className="btn btn-ai shrink-0"
           style={{ padding: "0.35rem 0.7rem" }}
           disabled={running || start.isPending || selectedRules.length === 0}
-          onClick={() => { setCollapsed(false); start.mutate(); }}
+          onClick={() => start.mutate()}
         >
           <Icon.sparkle width={14} height={14} />
           {running
@@ -166,8 +116,6 @@ export function AiReviewPanel({
         </button>
       </div>
 
-      {collapsed ? null : (
-      <>
       <p className="text-xs text-ink-faint mb-2">
         A critical review of the current draft against the admin-defined rule checklist and playbooks.
         Runs in the background — you can leave this page and come back; every AI finding is also
@@ -347,8 +295,8 @@ export function AiReviewPanel({
           {(start.error as any).message}
         </div>
       )}
-      </>
-      )}
-    </Card>
+    </>
   );
+
+  return bare ? body : <Card>{body}</Card>;
 }

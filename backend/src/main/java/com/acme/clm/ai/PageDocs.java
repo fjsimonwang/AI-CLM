@@ -101,9 +101,8 @@ public final class PageDocs {
             deviation callouts, with "Submit for approval" (confirm modal → starts the workflow),
             "Save draft", "Cancel", and a "Back to conversation" button — you can return to the chat
             to change anything and re-submit; that updates the SAME draft (no duplicate). Below the
-            card: a full document editor + the "AI document review" panel. That panel folds sideways
-            (click its title / the ">" chevron) to a slim rail on the right — like collapsing the
-            sidebar — and the editor widens to take the space; click the rail to bring it back.
+            card: a full document editor on the left and the "AI document review" panel on the right
+            (check points, optional playbooks, "Run AI review", findings with jump-to-quote).
             """);
         add("/intake-sessions/:id", """
             INTAKE HISTORY (/intake-sessions/{id}) — read-only archive of a completed conversational
@@ -157,6 +156,12 @@ public final class PageDocs {
             ?tab=discussion opens it. While participants' agents are working, an animated status
             shows INSIDE the affected thread — "Checking with all agents", changing to "An agent is
             replying" once an agent message actually lands.
+            AI REVIEW PANEL: the "AI document review" panel works the same way — a movable/dockable
+            panel, docked as a full-height column on the RIGHT of the tab content by default, drag
+            its header to float it, "Dock" snaps it back, "×" hides it. It is hidden by default; an
+            "AI review" button sits next to "Show discussion" to open it. Open/closed state and any
+            floating position are remembered. (Its contents — check points, playbooks, findings —
+            are described under "AI review & submit gate" below.)
             TABS: "Overview" (key-value terms: contracting
             entity, counterparties, governing law, value, dates, owner, liability; grouped "Deal
             terms"; "Clauses used" with tier badges; "People with access" — add/remove participants
@@ -165,8 +170,8 @@ public final class PageDocs {
             confidence); "Document" (document editor with Read/Edit toggle when EDIT_CONTRACT, autosave,
             "Re-assemble" — rebuilds the document from the current template + clauses, discarding manual
             edits; this is the ONLY thing that regenerates the document, resubmitting a revised request
-            never does — "Open full", supporting documents with "Download", plus the "AI document
-            review" panel — see below);
+            never does — "Open full", supporting documents with "Download". The AI review panel is
+            not part of this tab — it is the separate dockable "AI review" panel, see above);
             "Workflow" (workflow name, current state badge, "Start workflow", task list showing each
             task's outcome, completion date and the approve/reject note — a rejection reason is
             highlighted); "Obligations" (table with Verify/Close and confidence);
@@ -175,12 +180,11 @@ public final class PageDocs {
             precedent basis); "Risks" (risk register: "Add risk", severity badges, "Dismiss"/"Resolve"/
             "Reopen", quoted locations); "Audit trail" (who did what, with AI actors marked).
             AI review & submit gate: "Submit for approval" first runs/syncs an "AI quick check" (modal
-            listing findings by severity; still allows "Submit anyway"). In the Document tab the review
-            panel lets you pick checked rules and optional playbooks, re-runs, links findings' quotes
-            into the document, and offers Dismiss/Resolve. The "AI document review" panel folds
-            sideways — click its title / the ">" chevron and it collapses to a slim vertical rail on
-            the right edge (like collapsing the sidebar), with the document editor widening to fill
-            the space; click the rail to expand it again.
+            listing findings by severity; still allows "Submit anyway"). The "AI review" panel (opened
+            from the button next to "Show discussion" — see AI REVIEW PANEL above) lets you pick
+            checked rules and optional playbooks, re-run the review, click a finding's quote to jump
+            to it in the document, and Dismiss/Resolve findings; every finding is also written to the
+            Risks tab.
             """);
         add("/contracts", """
             CONTRACTS LIST (/contracts) — the contract register with an AI inquiry pane.
