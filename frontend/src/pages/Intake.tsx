@@ -88,6 +88,7 @@ export default function Intake() {
   const [confirmAction, setConfirmAction] = useState<"submit" | "cancel" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paperMode, setPaperMode] = useState(false); // 3rd-party paper upload flow
+  const [reviewCollapsed, setReviewCollapsed] = useState(false); // AI review panel fold on the review page
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -565,13 +566,29 @@ export default function Intake() {
     return (
       <>
       <div className="max-w-7xl mx-auto space-y-4 flex flex-col max-lg:h-auto lg:h-[calc(100vh-120px)]">
-        <div className="grid gap-4 items-stretch lg:grid-cols-[2fr_1fr] flex-1 lg:min-h-0">
+        <div className={`grid gap-4 items-stretch flex-1 lg:min-h-0 ${reviewCollapsed ? "lg:grid-cols-1" : "lg:grid-cols-[2fr_1fr]"}`}>
         <div className="min-w-0 flex flex-col gap-4 lg:h-full lg:min-h-0 lg:overflow-y-auto">
         <Card>
-          <SectionTitle>Draft ready for your review</SectionTitle>
+          <SectionTitle
+            right={
+              <button
+                className="btn"
+                style={{ padding: "0.3rem 0.6rem" }}
+                onClick={() => { setResult(null); setDraftSaved(false); }}
+              >
+                <Icon.chevronLeft width={14} height={14} /> Back to conversation
+              </button>
+            }
+          >
+            Draft ready for your review
+          </SectionTitle>
           <p className="text-sm">
             {result.documentKept ? <>Updated <b>{result.contractNumber}</b>. </> : <>Created <b>{result.contractNumber}</b> as a draft. </>}
-            Review the document below, then submit it for approval.
+            Review the document below, then submit it for approval. You can go{" "}
+            <button className="link" onClick={() => { setResult(null); setDraftSaved(false); }}>
+              back to the conversation
+            </button>{" "}
+            to change anything — re-submitting updates this same draft.
           </p>
           {result.documentKept && !result.paperMode && (
             <div
@@ -647,10 +664,15 @@ export default function Intake() {
         )}
         <DocumentPanel contractId={result.contractId} fullPage />
         </div>
-        <div className="min-w-0 lg:h-full lg:min-h-0 lg:overflow-y-auto">
-          <AiReviewPanel contractId={result.contractId} />
+        {!reviewCollapsed && (
+          <div className="min-w-0 lg:h-full lg:min-h-0 lg:overflow-y-auto">
+            <AiReviewPanel contractId={result.contractId} collapsed={false} onCollapsedChange={setReviewCollapsed} />
+          </div>
+        )}
         </div>
-        </div>
+        {reviewCollapsed && (
+          <AiReviewPanel contractId={result.contractId} collapsed onCollapsedChange={setReviewCollapsed} />
+        )}
       </div>
 
       {confirmAction && (

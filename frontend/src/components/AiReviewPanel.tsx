@@ -10,14 +10,29 @@ const sevTone = (s?: string) => riskTone(s);
 const sevRank = (s?: string) => (s === "CRITICAL" ? 4 : s === "HIGH" ? 3 : s === "MEDIUM" ? 2 : 1);
 const dedupe = (title: string) => (title || "").toLowerCase().replace(/\s+/g, " ").trim();
 
-export function AiReviewPanel({ contractId }: { contractId: string }) {
+export function AiReviewPanel({
+  contractId,
+  collapsed: collapsedProp,
+  onCollapsedChange,
+}: {
+  contractId: string;
+  collapsed?: boolean;
+  onCollapsedChange?: (v: boolean) => void;
+}) {
   const can = usePerms();
   const qc = useQueryClient();
   const canPlaybook = can("EDIT_CONTRACT");
   const canClose = canPlaybook;
   const [selected, setSelected] = useState<string[]>([]);
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedInternal, setCollapsedInternal] = useState(false);
+  const controlled = onCollapsedChange !== undefined;
+  const collapsed = controlled ? !!collapsedProp : collapsedInternal;
+  const setCollapsed = (v: boolean | ((p: boolean) => boolean)) => {
+    const next = typeof v === "function" ? v(collapsed) : v;
+    if (controlled) onCollapsedChange!(next);
+    else setCollapsedInternal(next);
+  };
 
   const rules = useQuery({ queryKey: ["review-rules"], queryFn: () => api("/ai/review-rules") });
 

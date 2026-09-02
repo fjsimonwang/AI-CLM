@@ -317,6 +317,7 @@ export default function ContractDetail() {
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
   const [signStep, setSignStep] = useState<null | "confirm" | "sent">(null);
+  const [reviewCollapsed, setReviewCollapsed] = useState(false);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
@@ -1070,8 +1071,12 @@ export default function ContractDetail() {
       )}
 
       {tab === "document" && (
-        <div className="fade-in">
-        <div className="grid gap-4 items-stretch lg:grid-cols-[2fr_1fr] lg:h-[calc(0.9428*min(100vw-276px,1240px)+72px)]">
+        <div className="fade-in space-y-4">
+        <div
+          className={`grid gap-4 items-stretch lg:h-[calc(0.9428*min(100vw-276px,1240px)+72px)] ${
+            reviewCollapsed ? "lg:grid-cols-1" : "lg:grid-cols-[2fr_1fr]"
+          }`}
+        >
           <div className="min-w-0 flex flex-col gap-3 lg:h-full">
             <div className="min-w-0 flex-1 min-h-0"><DocumentPanel contractId={id!} /></div>
             {(attachmentsQuery.data || []).length > 0 && (
@@ -1096,8 +1101,15 @@ export default function ContractDetail() {
               </Card>
             )}
           </div>
-          <div className="min-w-0 lg:h-full lg:overflow-y-auto"><AiReviewPanel contractId={id!} /></div>
+          {!reviewCollapsed && (
+            <div className="min-w-0 lg:h-full lg:overflow-y-auto">
+              <AiReviewPanel contractId={id!} collapsed={false} onCollapsedChange={setReviewCollapsed} />
+            </div>
+          )}
         </div>
+        {reviewCollapsed && (
+          <AiReviewPanel contractId={id!} collapsed onCollapsedChange={setReviewCollapsed} />
+        )}
         </div>
       )}
 

@@ -99,7 +99,10 @@ public final class PageDocs {
             enabled only when nothing required is missing and AI guesses are confirmed.
             After generating: "Draft ready for your review" card listing carried clause chips and AI
             deviation callouts, with "Submit for approval" (confirm modal → starts the workflow),
-            "Save draft", "Cancel"; below it a full document editor + "AI document review" panel.
+            "Save draft", "Cancel", and a "Back to conversation" button — you can return to the chat
+            to change anything and re-submit; that updates the SAME draft (no duplicate). Below the
+            card: a full document editor + the "AI document review" panel. That panel folds (click
+            its title); folded, it drops to a thin bar and the editor widens to full width.
             """);
         add("/intake-sessions/:id", """
             INTAKE HISTORY (/intake-sessions/{id}) — read-only archive of a completed conversational
@@ -174,8 +177,9 @@ public final class PageDocs {
             listing findings by severity; still allows "Submit anyway"). In the Document tab the review
             panel lets you pick checked rules and optional playbooks, re-runs, links findings' quotes
             into the document, and offers Dismiss/Resolve. The "AI document review" panel is
-            collapsible — click its title to fold it; when folded it still shows a badge with the
-            finding count (or "reviewing…").
+            collapsible — click its title to fold it; folded, it drops to a thin bar (still showing
+            a badge with the finding count, or "reviewing…") and the document editor widens to fill
+            the space.
             """);
         add("/contracts", """
             CONTRACTS LIST (/contracts) — the contract register with an AI inquiry pane.

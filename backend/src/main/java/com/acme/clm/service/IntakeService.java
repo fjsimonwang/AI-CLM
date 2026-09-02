@@ -564,7 +564,14 @@ public class IntakeService {
                                Map<String, Object> fieldOverrides) {
         IntakeSession s = sessions.findById(sessionId)
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("Intake session not found"));
-        if ("SUBMITTED".equals(s.status) && s.resultingContractId != null) return s.resultingContractId;
+        // Already produced a contract that has moved past DRAFT (in review / executed / …): nothing
+        // more to do here — return it. While it is still a DRAFT the requester may have gone back to
+        // the conversation to change things, so fall through and patch that same draft below.
+        if ("SUBMITTED".equals(s.status) && s.resultingContractId != null) {
+            boolean stillDraft = contracts.findById(s.resultingContractId)
+                    .map(c -> "DRAFT".equals(c.status)).orElse(false);
+            if (!stillDraft) return s.resultingContractId;
+        }
 
         Map<String, Object> captured = Json.readMap(s.capturedFields);
         Map<String, String> provenance = strMap(Json.readMap(s.fieldProvenance));
