@@ -1071,10 +1071,10 @@ export default function ContractDetail() {
       )}
 
       {tab === "document" && (
-        <div className="fade-in space-y-4">
+        <div className="fade-in">
         <div
-          className={`grid gap-4 items-stretch lg:h-[calc(0.9428*min(100vw-276px,1240px)+72px)] ${
-            reviewCollapsed ? "lg:grid-cols-1" : "lg:grid-cols-[2fr_1fr]"
+          className={`grid gap-4 items-stretch lg:h-[calc(0.9428*min(100vw-276px,1240px)+72px)] transition-[grid-template-columns] duration-200 ${
+            reviewCollapsed ? "lg:grid-cols-[minmax(0,1fr)_44px]" : "lg:grid-cols-[2fr_1fr]"
           }`}
         >
           <div className="min-w-0 flex flex-col gap-3 lg:h-full">
@@ -1101,15 +1101,10 @@ export default function ContractDetail() {
               </Card>
             )}
           </div>
-          {!reviewCollapsed && (
-            <div className="min-w-0 lg:h-full lg:overflow-y-auto">
-              <AiReviewPanel contractId={id!} collapsed={false} onCollapsedChange={setReviewCollapsed} />
-            </div>
-          )}
+          <div className={reviewCollapsed ? "min-w-0 lg:h-full" : "min-w-0 lg:h-full lg:overflow-y-auto"}>
+            <AiReviewPanel contractId={id!} collapsed={reviewCollapsed} onCollapsedChange={setReviewCollapsed} />
+          </div>
         </div>
-        {reviewCollapsed && (
-          <AiReviewPanel contractId={id!} collapsed onCollapsedChange={setReviewCollapsed} />
-        )}
         </div>
       )}
 

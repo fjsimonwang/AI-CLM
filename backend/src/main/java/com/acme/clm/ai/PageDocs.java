@@ -101,8 +101,9 @@ public final class PageDocs {
             deviation callouts, with "Submit for approval" (confirm modal → starts the workflow),
             "Save draft", "Cancel", and a "Back to conversation" button — you can return to the chat
             to change anything and re-submit; that updates the SAME draft (no duplicate). Below the
-            card: a full document editor + the "AI document review" panel. That panel folds (click
-            its title); folded, it drops to a thin bar and the editor widens to full width.
+            card: a full document editor + the "AI document review" panel. That panel folds sideways
+            (click its title / the ">" chevron) to a slim rail on the right — like collapsing the
+            sidebar — and the editor widens to take the space; click the rail to bring it back.
             """);
         add("/intake-sessions/:id", """
             INTAKE HISTORY (/intake-sessions/{id}) — read-only archive of a completed conversational
@@ -176,10 +177,10 @@ public final class PageDocs {
             AI review & submit gate: "Submit for approval" first runs/syncs an "AI quick check" (modal
             listing findings by severity; still allows "Submit anyway"). In the Document tab the review
             panel lets you pick checked rules and optional playbooks, re-runs, links findings' quotes
-            into the document, and offers Dismiss/Resolve. The "AI document review" panel is
-            collapsible — click its title to fold it; folded, it drops to a thin bar (still showing
-            a badge with the finding count, or "reviewing…") and the document editor widens to fill
-            the space.
+            into the document, and offers Dismiss/Resolve. The "AI document review" panel folds
+            sideways — click its title / the ">" chevron and it collapses to a slim vertical rail on
+            the right edge (like collapsing the sidebar), with the document editor widening to fill
+            the space; click the rail to expand it again.
             """);
         add("/contracts", """
             CONTRACTS LIST (/contracts) — the contract register with an AI inquiry pane.

@@ -111,29 +111,43 @@ export function AiReviewPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editedSeq, run?.status, run?.createdAt]);
 
+  // Collapsed: a slim full-height rail on the right (folds sideways, like the sidebar) — click to expand.
+  if (collapsed) {
+    return (
+      <Card className="!p-0 lg:h-full overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          title="Expand AI document review"
+          className="w-full h-full min-h-[120px] flex flex-col items-center gap-3 py-3 hover:bg-surface-2 transition-colors"
+        >
+          <Icon.chevronLeft width={16} height={16} className="shrink-0 text-ink-faint" />
+          {hasResult && !running && findings.length > 0 && (
+            <Badge tone={critical > 0 ? "risk" : "warn"}>{findings.length}</Badge>
+          )}
+          {running && <span className="w-2 h-2 rounded-full bg-[color:var(--ai)] animate-pulse" />}
+          <span
+            className="text-[11px] font-medium text-ink-soft uppercase tracking-wide whitespace-nowrap"
+            style={{ writingMode: "vertical-rl" }}
+          >
+            AI document review
+          </span>
+        </button>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <div className="flex items-center justify-between gap-2 mb-3">
         <button
           type="button"
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={() => setCollapsed(true)}
           className="flex items-center gap-1.5 min-w-0"
-          aria-expanded={!collapsed}
+          title="Fold the AI document review panel"
         >
-          <Icon.chevronDown
-            width={15}
-            height={15}
-            style={{ transition: "transform 0.2s", transform: collapsed ? "rotate(-90deg)" : "none" }}
-          />
           <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI document review</h2>
-          {collapsed && hasResult && !running && (
-            <Badge tone={critical > 0 ? "risk" : findings.length ? "warn" : "ok"}>
-              {findings.length
-                ? `${findings.length} finding${findings.length > 1 ? "s" : ""}${critical > 0 ? ` · ${critical} critical` : ""}`
-                : "no issues"}
-            </Badge>
-          )}
-          {collapsed && running && <Badge tone="ai">reviewing…</Badge>}
+          <Icon.chevronRight width={15} height={15} className="text-ink-faint shrink-0" />
         </button>
         <button
           className="btn btn-ai shrink-0"
