@@ -28,6 +28,7 @@ public class AiController {
 
     private final Repos.AiInteractions interactions;
     private final Repos.Contracts contracts;
+    private final Repos.LegalEntities entities;
     private final Repos.ClauseVariants clauseVariants;
     private final Repos.ClauseConcepts clauseConcepts;
     private final Repos.PrecedentLinks precedents;
@@ -46,10 +47,11 @@ public class AiController {
     public AiController(Repos.AiInteractions interactions, Repos.Contracts contracts, Repos.ClauseVariants clauseVariants,
                         Repos.ClauseConcepts clauseConcepts, AiService ai, AiInteractionLog aiLog,
                         AuditService audit, CurrentUser current, Repos.PrecedentLinks precedents,
-                        Repos.AiReviewRules reviewRules,
+                        Repos.AiReviewRules reviewRules, Repos.LegalEntities entities,
                         BriefingService briefings, ReviewService review, AiInsightService insightService,
                         AccessService access, com.acme.clm.service.PolicyService policies,
                         com.acme.clm.service.AiFeatures aiFeatures) {
+        this.entities = entities;
         this.policies = policies;
         this.aiFeatures = aiFeatures;
         this.interactions = interactions;
@@ -146,11 +148,17 @@ public class AiController {
         Map<String, Object> attrs = Json.readMap(c.typeAttributes);
         Map<String, Object> compact = new LinkedHashMap<>();
         attrs.forEach((k, v) -> { if (v != null && !String.valueOf(v).isBlank()) compact.put(k, v); });
-        return "Contract %s (%s), entity %s, governing law %s, status %s, value %s %s, annual value %s, "
-                + "effective %s, expiry %s, payment terms %s days. type_attributes: %s. Existing note: %s"
-                .formatted(c.contractNumber, c.contractTypeCode, c.contractingEntityId, c.governingLawCode,
+        String entityName = c.contractingEntityId == null ? "n/a"
+                : entities.findById(c.contractingEntityId).map(e -> e.legalName).orElse(c.contractingEntityId.toString());
+        String paymentTerms = c.paymentTermsDays == null ? "not set" : c.paymentTermsDays + " days";
+        // parenthesise the concatenation before .formatted — `.formatted` binds tighter than `+`,
+        // so without the parens only the last literal is formatted and every field shifts into the
+        // wrong %s (the entity UUID ended up in "payment terms … days").
+        return ("Contract %s (%s), entity %s, governing law %s, status %s, value %s %s, annual value %s, "
+                + "effective %s, expiry %s, payment terms %s. type_attributes: %s. Existing note: %s")
+                .formatted(c.contractNumber, c.contractTypeCode, entityName, c.governingLawCode,
                         c.status, c.valueAmount, c.currency, c.annualValueAmount,
-                        c.effectiveDate, c.expiryDate, c.paymentTermsDays,
+                        c.effectiveDate, c.expiryDate, paymentTerms,
                         Json.write(compact), c.summary);
     }
 
