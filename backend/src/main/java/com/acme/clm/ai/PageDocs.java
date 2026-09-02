@@ -71,14 +71,19 @@ public final class PageDocs {
             No permission gates; data is access-filtered server-side.
             """);
         add("/intake", """
-            NEW REQUEST / INTAKE (/intake) — conversational contract intake. Two-column split pane.
+            NEW REQUEST / INTAKE (/intake) — conversational contract intake. The "AI assistant" chat
+            is a movable / dockable / resizable panel (⠿ drag its header to detach it to a
+            free-floating box, drag the bottom-right corner to resize it, "Dock" snaps it back to a
+            column beside the form, drag the docked column's right edge to change its width, "×"
+            hides it). Hidden, an "AI assistant" button above the form brings it back. The Request
+            details form fills the rest of the width.
             Arriving here via "Revise & resubmit" on a rejected request loads that request's saved
             session instead of a fresh one, with a red "Revising a returned request" banner showing
             why it was sent back; edits + regenerate + resubmit update the same contract. On a
             revision the document is NOT re-assembled from the template — the last edited version is
             kept as-is; the review page says so, and the requester can rebuild it from the template
             with "Re-assemble" on the contract's Document tab if they want to.
-            LEFT: chat "New request — describe what you need in plain language". AI replies stream
+            CHAT PANEL: "New request — describe what you need in plain language". AI replies stream
             token by token. Under the latest AI question there are quick-answer chips ("Send N answers"
             composes them). Header buttons: "Save draft"/"Saved", "Drafts (N)" (opens a drafts drawer —
             click to resume, 'X' deletes after confirm), "New chat". On a fresh chat there are shortcut
@@ -87,7 +92,7 @@ public final class PageDocs {
             (AI reads the document and fills the fields; that document becomes read-only after submit).
             A separate paper mode replaces the chat with a drag-and-drop upload zone ("Drop the contract
             file here", .docx/.html/.txt, max 10 MB) and "Back to chat".
-            RIGHT: "Request details" card — all intake fields grouped under colored headers (BASICS,
+            REQUEST DETAILS: card — all intake fields grouped under colored headers (BASICS,
             SCOPE, TERM & RENEWAL, DATA & PRIVACY, GOVERNANCE, EXPECTED ROUTING), each editable,
             required fields marked *; AI-populated fields show provenance chips and "% confidence";
             low-trust values are highlighted with "looks right — confirm". Fields save on blur; a
@@ -187,16 +192,20 @@ public final class PageDocs {
             Risks tab.
             """);
         add("/contracts", """
-            CONTRACTS LIST (/contracts) — the contract register with an AI inquiry pane.
+            CONTRACTS LIST (/contracts) — the contract register with an AI inquiry panel.
             Header: title "Contracts" and a "New request" button (goes to /intake).
-            Split pane: LEFT "AI inquiry — ask about your portfolio": an "Ask" input + "Ask" button
-            (POST /inquiry/ask) and suggestion chips; results show "Interpreted as" (the AI's
-            restatement with filter badges), a refusal as a warning card; "edit & re-run" exposes an
-            editable interpretation + raw filter fields and "Re-run"; "Add as dashboard section" saves
-            a bar/pie chart (choose "Group by" dimension) to the Dashboard; "New chat" resets. When an
-            inquiry is active the list pane widens and an accent banner shows "Filtered by your AI
-            inquiry" with "Show all" to clear.
-            RIGHT: filter card ("All types", status, region, "Counterparty…" text, "Expiring ≤ 30/90/180
+            AI INQUIRY PANEL ("Ask about your portfolio"): a movable / dockable / resizable panel
+            (⠿ drag its header to detach it to a free-floating box, drag the bottom-right corner to
+            resize, "Dock" snaps it back to a column beside the table, drag the docked column's
+            right edge to change its width, "×" hides it; an "AI inquiry" button above the table
+            brings it back). Inside: an "Ask" input + "Ask" button (POST /inquiry/ask) and
+            suggestion chips; results show "Interpreted as" (the AI's restatement with filter
+            badges), a refusal as a warning card; "edit & re-run" exposes an editable interpretation
+            + raw filter fields and "Re-run"; "Add as dashboard section" saves a bar/pie chart
+            (choose "Group by" dimension) to the Dashboard; "New chat" resets. When an inquiry is
+            active an accent banner over the table shows "Filtered by your AI inquiry" with "Show
+            all" to clear.
+            TABLE SIDE: filter card ("All types", status, region, "Counterparty…" text, "Expiring ≤ 30/90/180
             days") above the contract table. The table has add/remove columns ("Columns (N)" button),
             per-column sort (arrows in each header) and per-column filter menus (is / contains / before /
             after / larger / smaller / is empty). Columns include Contract number + title, Type,

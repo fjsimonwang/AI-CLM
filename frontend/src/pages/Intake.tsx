@@ -7,7 +7,7 @@ import { AiAffordance } from "../components/AiAffordance";
 import { Icon } from "../components/icons";
 import { DocumentPanel } from "../components/DocumentPanel";
 import { AiReviewPanel } from "../components/AiReviewPanel";
-import { SplitPane, useSplitStore } from "../components/SplitPane";
+import { DockablePanel, useDockablePanel } from "../components/DockablePanel";
 
 type Msg = { role: string; content: string };
 
@@ -88,6 +88,16 @@ export default function Intake() {
   const [confirmAction, setConfirmAction] = useState<"submit" | "cancel" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paperMode, setPaperMode] = useState(false); // 3rd-party paper upload flow
+
+  // the AI assistant chat is a movable / dockable / resizable panel
+  const [chatOpen, setChatOpen] = useState(() => {
+    try { return localStorage.getItem("clm-intake-chat.open") !== "0"; } catch { return true; }
+  });
+  const toggleChat = (v: boolean) => {
+    setChatOpen(v);
+    try { localStorage.setItem("clm-intake-chat.open", v ? "1" : "0"); } catch { /* ignore */ }
+  };
+  const chat = useDockablePanel("clm-intake-chat", "[data-intake-chat-card]", { defaultW: 460, defaultDockW: 440 });
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -227,7 +237,7 @@ export default function Intake() {
       setSession(s);
       setMessages(s.conversation || []);
       resetWorkspace();
-      useSplitStore.getState().expand("left");
+      toggleChat(true);
     } catch (e: any) {
       setSubmitError(e.message || String(e));
     }
@@ -311,7 +321,7 @@ export default function Intake() {
         setSession(s);
         setMessages(s.conversation || []);
         sessionsQ.refetch();
-        useSplitStore.getState().expand("left");
+        toggleChat(true);
       }).catch((e: any) => setSubmitError(e.message || String(e)));
       return;
     }
@@ -745,11 +755,23 @@ export default function Intake() {
         </div>
       </div>
     )}
-    <SplitPane
-      left={<>
-      <Card className="flex flex-col !p-0 max-lg:h-[75vh] lg:h-[calc(100vh-160px)]">
+    <div className="lg:flex lg:gap-3 lg:items-start">
+      {chatOpen && (
+        <DockablePanel
+          title="AI assistant"
+          icon={<Icon.sparkle width={14} height={14} style={{ color: "var(--accent)" }} />}
+          cardAttr="data-intake-chat-card"
+          pos={chat.pos}
+          dockW={chat.dockW}
+          onGrab={chat.startDrag}
+          onDock={chat.pos ? chat.dock : undefined}
+          onClose={() => toggleChat(false)}
+          onResize={chat.startResize}
+          onDockResize={chat.startDockResize}
+        >
+      <div className="flex flex-col h-full min-h-0 bg-surface">
         <div
-          className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2"
+          className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2 shrink-0"
           style={{ background: "linear-gradient(90deg, var(--accent-soft) 0%, transparent 70%)" }}
         >
           <span className="w-6 h-6 rounded-[8px] bg-accent flex items-center justify-center shrink-0" style={{ background: "var(--accent)" }}>
@@ -1203,7 +1225,6 @@ export default function Intake() {
             placeholder={'e.g. "Mutual NDA with Meridian, a logistics vendor in Germany, 24 months"'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onFocus={() => useSplitStore.getState().expand("left")}
             onKeyDown={(e) => e.key === "Enter" && send()}
             disabled={streaming}
           />
@@ -1213,9 +1234,19 @@ export default function Intake() {
         </div>
         </>
         )}
-      </Card>
-      </>}
-      right={<>
+      </div>
+        </DockablePanel>
+      )}
+      <div className="min-w-0 lg:flex-1">
+      {!chatOpen && (
+        <button
+          className="btn mb-3"
+          style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+          onClick={() => toggleChat(true)}
+        >
+          <Icon.sparkle width={13} height={13} /> AI assistant
+        </button>
+      )}
       <div className="relative max-lg:h-auto lg:h-[calc(100vh-160px)]">
         <div className="space-y-4 max-lg:h-auto max-lg:overflow-visible lg:h-full lg:overflow-y-auto pr-1 pb-20">
         {session?.paperFilename && (
@@ -1494,8 +1525,8 @@ export default function Intake() {
           </button>
         </div>
       </div>
-      </>}
-    />
+      </div>
+    </div>
     </>
   );
 }

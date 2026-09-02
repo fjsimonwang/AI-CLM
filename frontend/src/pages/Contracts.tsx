@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Card, Spinner } from "../components/ui";
-import { SplitPane, useSplitStore } from "../components/SplitPane";
+import { DockablePanel, useDockablePanel } from "../components/DockablePanel";
 import { InquiryPanel } from "../components/InquiryPanel";
 import { ContractTable } from "../components/ContractTable";
 import { Icon } from "../components/icons";
@@ -112,10 +112,15 @@ export default function Contracts() {
 
   const set = (k: keyof Filters, v: string) => setManual((s) => ({ ...s, [k]: v || undefined }));
 
-  // when an inquiry produces results, give the contract list the wide pane
-  useEffect(() => {
-    if (inquiryFilters) useSplitStore.setState({ frac: 0.25 });
-  }, [inquiryFilters]);
+  // the AI inquiry panel is a movable / dockable / resizable panel
+  const [inquiryOpen, setInquiryOpen] = useState(() => {
+    try { return localStorage.getItem("clm-contracts-inquiry.open") !== "0"; } catch { return true; }
+  });
+  const toggleInquiry = (v: boolean) => {
+    setInquiryOpen(v);
+    try { localStorage.setItem("clm-contracts-inquiry.open", v ? "1" : "0"); } catch { /* ignore */ }
+  };
+  const inq = useDockablePanel("clm-contracts-inquiry", "[data-inquiry-card]", { defaultW: 420, defaultDockW: 380 });
 
   return (
     <div className="space-y-4">
@@ -124,17 +129,41 @@ export default function Contracts() {
         <Link to="/intake" className="btn btn-primary">New request</Link>
       </div>
 
-      <SplitPane
-        left={<InquiryPanel onFilters={setInquiryFilters} />}
-        right={
+      <div className="lg:flex lg:gap-3 lg:items-start">
+        {inquiryOpen && (
+          <DockablePanel
+            title="AI inquiry"
+            icon={<Icon.sparkle width={14} height={14} style={{ color: "var(--accent)" }} />}
+            cardAttr="data-inquiry-card"
+            pos={inq.pos}
+            dockW={inq.dockW}
+            onGrab={inq.startDrag}
+            onDock={inq.pos ? inq.dock : undefined}
+            onClose={() => toggleInquiry(false)}
+            onResize={inq.startResize}
+            onDockResize={inq.startDockResize}
+          >
+            <InquiryPanel onFilters={setInquiryFilters} />
+          </DockablePanel>
+        )}
+        <div className="min-w-0 lg:flex-1">
+          {!inquiryOpen && (
+            <button
+              className="btn mb-3"
+              style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+              onClick={() => toggleInquiry(true)}
+            >
+              <Icon.sparkle width={13} height={13} /> AI inquiry
+            </button>
+          )}
           <ContractList
             f={effective}
             set={set}
             inquiryActive={inquiryActive}
             onClearInquiry={() => setInquiryFilters(null)}
           />
-        }
-      />
+        </div>
+      </div>
     </div>
   );
 }
