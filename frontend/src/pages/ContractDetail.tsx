@@ -731,8 +731,9 @@ export default function ContractDetail() {
             )}
           </div>
         </div>
+        <div className="flex gap-2 shrink-0 flex-wrap justify-end">
         {isRequestor && (
-          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          <>
             {d.status === "DRAFT" && d.rejectionReason && d.intakeSessionId && (
               <button className="btn btn-primary" disabled={revise.isPending} onClick={() => revise.mutate()}>
                 {revise.isPending ? "Opening…" : "Revise & resubmit"}
@@ -771,10 +772,10 @@ export default function ContractDetail() {
                 Recall to draft
               </button>
             )}
-          </div>
+          </>
         )}
         {activeTask && user?.id && activeTask.assignedUserId === user.id && (
-          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          <>
             {wfData.availableEvents?.includes("approve") && (
               <button
                 className="btn btn-primary"
@@ -803,8 +804,9 @@ export default function ContractDetail() {
                 Send for Signature
               </button>
             )}
-          </div>
+          </>
         )}
+        </div>
       </div>
 
       {d.status === "DRAFT" && d.rejectionReason && (
