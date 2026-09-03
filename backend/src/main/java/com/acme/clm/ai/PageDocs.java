@@ -73,10 +73,10 @@ public final class PageDocs {
         add("/intake", """
             NEW REQUEST / INTAKE (/intake) — conversational contract intake. The "AI assistant" chat
             is a movable / dockable / resizable panel (⠿ drag its header to detach it to a
-            free-floating box, drag the bottom-right corner to resize it, "Dock" snaps it back to a
-            column beside the form, drag the docked column's right edge to change its width, "×"
-            hides it). Hidden, an "AI assistant" button above the form brings it back. The Request
-            details form fills the rest of the width.
+            free-floating box; then drag any edge or the top-right / bottom-right corner to resize;
+            "Dock" snaps it back to a column beside the form, whose width you set by dragging the
+            column's right edge; "×" hides it). Hidden, an "AI assistant" button above the form
+            brings it back. The Request details form fills the rest of the width.
             Arriving here via "Revise & resubmit" on a rejected request loads that request's saved
             session instead of a fresh one, with a red "Revising a returned request" banner showing
             why it was sent back; edits + regenerate + resubmit update the same contract. On a
@@ -151,22 +151,25 @@ public final class PageDocs {
             request is called out on the bar too.
             An "AI summary & briefing" card sits under it (collapsible; can regenerate the
             approver briefing).
-            DISCUSSION PANEL: comment threads live in a DRAGGABLE panel (not a tab). By default it
-            is docked as a full-height left column right beside the tab content (sticky, so it
-            stays in view as you scroll). Drag its header to detach it into a free-floating box
-            anywhere on screen; a "Dock" button then snaps it back. Open/closed and any custom
-            position are remembered. "New thread" (just a message, no title), reply, resolve, and a
+            DISCUSSION PANEL: comment threads live in a movable / dockable / resizable panel (not a
+            tab). By default it is docked as a full-height left column beside the tab content
+            (sticky); drag the docked column's right edge to change its width. Drag the ⠿ header to
+            detach it to a free-floating box; then drag any edge, the bottom-right corner, or the
+            top-right corner (top-right keeps the bottom edge pinned) to resize it, and "Dock" snaps
+            it back. Open/closed state and any custom position/size are remembered.
+            "New thread" (just a message, no title), reply, resolve, and a
             "✦ Ask agent" action per thread when you have Agent Crew on (see CROSS-CUTTING FEATURES
             below). An "×" hides the panel (a "Show discussion" button brings it back); a link with
             ?tab=discussion opens it. While participants' agents are working, an animated status
             shows INSIDE the affected thread — "Checking with all agents", changing to "An agent is
             replying" once an agent message actually lands.
-            AI REVIEW PANEL: the "AI document review" panel works the same way — a movable/dockable
-            panel, docked as a full-height column on the RIGHT of the tab content by default, drag
-            its header to float it, "Dock" snaps it back, "×" hides it. It is hidden by default; an
-            "AI review" button sits next to "Show discussion" to open it. Open/closed state and any
-            floating position are remembered. (Its contents — check points, playbooks, findings —
-            are described under "AI review & submit gate" below.)
+            AI REVIEW PANEL: the "AI document review" panel works exactly the same way — a movable /
+            dockable / resizable panel, docked as a full-height column on the RIGHT of the tab
+            content by default (resize its width from the column's edge; float it and resize from
+            any edge or the top-right / bottom-right corner). It is hidden by default; an "AI
+            review" button sits next to "Show discussion" to open it. Open/closed state and any
+            floating position/size are remembered. (Its contents — check points, playbooks,
+            findings — are described under "AI review & submit gate" below.)
             TABS: "Overview" (key-value terms: contracting
             entity, counterparties, governing law, value, dates, owner, liability; grouped "Deal
             terms"; "Clauses used" with tier badges; "People with access" — add/remove participants
@@ -195,10 +198,10 @@ public final class PageDocs {
             CONTRACTS LIST (/contracts) — the contract register with an AI inquiry panel.
             Header: title "Contracts" and a "New request" button (goes to /intake).
             AI INQUIRY PANEL ("Ask about your portfolio"): a movable / dockable / resizable panel
-            (⠿ drag its header to detach it to a free-floating box, drag the bottom-right corner to
-            resize, "Dock" snaps it back to a column beside the table, drag the docked column's
-            right edge to change its width, "×" hides it; an "AI inquiry" button above the table
-            brings it back). Inside: an "Ask" input + "Ask" button (POST /inquiry/ask) and
+            (⠿ drag its header to detach it to a free-floating box; then drag any edge or the
+            top-right / bottom-right corner to resize; "Dock" snaps it back to a column beside the
+            table, whose width you set by dragging the column's right edge; "×" hides it; an
+            "AI inquiry" button above the table brings it back). Inside: an "Ask" input + "Ask" button (POST /inquiry/ask) and
             suggestion chips; results show "Interpreted as" (the AI's restatement with filter
             badges), a refusal as a warning card; "edit & re-run" exposes an editable interpretation
             + raw filter fields and "Re-run"; "Add as dashboard section" saves a bar/pie chart

@@ -2,14 +2,16 @@ import { useRef, useState } from "react";
 import { Icon } from "./icons";
 
 export type PanelPos = { x: number; y: number; w: number; h: number };
+/** Which edge/corner a floating panel is being resized from. */
+export type ResizeDir = "e" | "s" | "se" | "ne";
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
 
 type Opts = { defaultW?: number; defaultH?: number; defaultDockW?: number };
 
 /**
- * State + gesture handlers for a panel that can be docked (a resizable-width column),
- * detached to a free-floating box (movable + corner-resizable), or closed.
+ * State + gesture handlers for a panel that can be docked (a width-resizable column),
+ * detached to a free-floating box (movable + edge/corner-resizable), or closed.
  * `pos === null` → docked. Floating position/size and the docked width persist in localStorage.
  * Open/closed state is owned by the caller (kept next to the toggle button).
  */
@@ -45,36 +47,51 @@ export function useDockablePanel(storageKey: string, cardSelector: string, opts:
 
   const dock = () => { setPos(null); savePos(null); };
 
-  const drag = (e: React.MouseEvent, mode: "move" | "resize") => {
+  const drag = (e: React.MouseEvent, mode: "move" | ResizeDir) => {
     if (mode === "move" && (e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
     e.stopPropagation();
     const host = (e.currentTarget as HTMLElement).closest(cardSelector) as HTMLElement | null;
     const r = host?.getBoundingClientRect();
     const cur = posRef.current;
+    // when detaching from the dock, cap the height/width so the box fits on screen
     const base: PanelPos = {
       x: cur?.x ?? r?.left ?? 48,
       y: cur?.y ?? r?.top ?? 48,
-      w: cur?.w ?? Math.round(r?.width ?? dW),
-      h: cur?.h ?? Math.round(r?.height ?? dH),
+      w: cur?.w ?? clamp(300, window.innerWidth - 24, Math.round(r?.width ?? dW)),
+      h: cur?.h ?? clamp(240, Math.round(window.innerHeight * 0.86), Math.round(r?.height ?? dH)),
     };
     const s = { mx: e.clientX, my: e.clientY };
     let last: PanelPos = base;
     document.body.style.userSelect = "none";
-    if (mode === "resize") document.body.style.cursor = "se-resize";
+    document.body.style.cursor =
+      mode === "move" ? "grabbing"
+      : mode === "e" ? "ew-resize"
+      : mode === "s" ? "ns-resize"
+      : mode === "ne" ? "nesw-resize"
+      : "nwse-resize";
+
     const move = (ev: MouseEvent) => {
-      last =
-        mode === "move"
-          ? {
-              x: clamp(0, window.innerWidth - 120, base.x + ev.clientX - s.mx),
-              y: clamp(8, window.innerHeight - 60, base.y + ev.clientY - s.my),
-              w: base.w, h: base.h,
-            }
-          : {
-              x: base.x, y: base.y,
-              w: clamp(300, Math.max(320, window.innerWidth - base.x - 8), base.w + ev.clientX - s.mx),
-              h: clamp(240, Math.max(260, window.innerHeight - base.y - 8), base.h + ev.clientY - s.my),
-            };
+      const dx = ev.clientX - s.mx;
+      const dy = ev.clientY - s.my;
+      if (mode === "move") {
+        last = {
+          x: clamp(0, Math.max(0, window.innerWidth - base.w), base.x + dx),
+          y: clamp(8, Math.max(8, window.innerHeight - base.h - 8), base.y + dy),
+          w: base.w, h: base.h,
+        };
+      } else {
+        let { x, y, w, h } = base;
+        const maxW = Math.max(320, window.innerWidth - base.x - 8);
+        if (mode === "e" || mode === "se" || mode === "ne") w = clamp(300, maxW, base.w + dx);
+        if (mode === "s" || mode === "se") h = clamp(240, Math.max(260, window.innerHeight - base.y - 8), base.h + dy);
+        if (mode === "ne") {
+          const bottom = base.y + base.h;
+          h = clamp(240, Math.max(260, bottom - 8), base.h - dy);
+          y = bottom - h;
+        }
+        last = { x, y, w, h };
+      }
       setPos(last);
     };
     const up = () => {
@@ -90,7 +107,7 @@ export function useDockablePanel(storageKey: string, cardSelector: string, opts:
   };
 
   const startDrag = (e: React.MouseEvent) => drag(e, "move");
-  const startResize = (e: React.MouseEvent) => drag(e, "resize");
+  const startResize = (dir: ResizeDir) => (e: React.MouseEvent) => drag(e, dir);
 
   // right-edge drag on the docked column
   const startDockResize = (e: React.MouseEvent) => {
@@ -121,9 +138,10 @@ export function useDockablePanel(storageKey: string, cardSelector: string, opts:
 
 /**
  * The visible chrome around a dockable panel's content: a draggable header strip with
- * Dock / close controls, plus resize affordances. One instance handles both modes —
- * pass `pos` (floating) or omit it (docked). `cardAttr` must match the `cardSelector`
- * given to {@link useDockablePanel} (e.g. cardAttr="data-x-card", selector="[data-x-card]").
+ * Dock / close controls, plus edge + corner resize handles when floating (both the
+ * top-right and bottom-right corners resize; the top-right keeps the bottom edge pinned).
+ * One instance handles both modes — pass `pos` (floating) or omit it (docked).
+ * `cardAttr` must match the `cardSelector` given to {@link useDockablePanel}.
  */
 export function DockablePanel({
   title,
@@ -148,11 +166,16 @@ export function DockablePanel({
   onGrab: (e: React.MouseEvent) => void;
   onDock?: () => void;
   onClose: () => void;
-  onResize?: (e: React.MouseEvent) => void;
+  onResize?: (dir: ResizeDir) => (e: React.MouseEvent) => void;
   onDockResize?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
 }) {
   const floating = !!pos;
+  const grip = (
+    <svg viewBox="0 0 10 10" width={9} height={9} className="text-ink-faint">
+      <path d="M9 1v8H1M9 5H5v4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
   return (
     <div
       {...{ [cardAttr]: "" }}
@@ -170,7 +193,10 @@ export function DockablePanel({
       }
     >
       <div
-        className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border cursor-move select-none shrink-0"
+        className={
+          "flex items-center justify-between gap-2 py-2 border-b border-border cursor-move select-none shrink-0 " +
+          (floating ? "pl-3 pr-6" : "px-3")
+        }
         style={{ background: "var(--surface-2)" }}
         onMouseDown={onGrab}
         title="Drag to move / detach"
@@ -196,15 +222,36 @@ export function DockablePanel({
       <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
 
       {floating && onResize && (
-        <div
-          onMouseDown={onResize}
-          title="Drag to resize"
-          className="absolute right-0 bottom-0 w-5 h-5 cursor-se-resize"
-        >
-          <svg viewBox="0 0 10 10" width={10} height={10} className="absolute right-[3px] bottom-[3px] text-ink-faint">
-            <path d="M9 1v8H1M9 5H5v4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-        </div>
+        <>
+          {/* right edge */}
+          <div
+            onMouseDown={onResize("e")}
+            title="Drag to resize width"
+            className="absolute top-8 bottom-4 right-0 w-1.5 cursor-ew-resize hover:bg-[color:color-mix(in_srgb,var(--accent)_35%,transparent)]"
+          />
+          {/* bottom edge */}
+          <div
+            onMouseDown={onResize("s")}
+            title="Drag to resize height"
+            className="absolute left-6 right-4 bottom-0 h-1.5 cursor-ns-resize hover:bg-[color:color-mix(in_srgb,var(--accent)_35%,transparent)]"
+          />
+          {/* bottom-right corner */}
+          <div
+            onMouseDown={onResize("se")}
+            title="Drag to resize"
+            className="absolute right-0 bottom-0 w-4 h-4 cursor-nwse-resize flex items-end justify-end p-[2px]"
+          >
+            {grip}
+          </div>
+          {/* top-right corner (keeps the bottom edge pinned) */}
+          <div
+            onMouseDown={onResize("ne")}
+            title="Drag to resize"
+            className="absolute right-0 top-0 z-[41] w-4 h-4 cursor-nesw-resize flex items-start justify-end p-[2px]"
+          >
+            <span className="rotate-90">{grip}</span>
+          </div>
+        </>
       )}
       {!floating && onDockResize && (
         <div

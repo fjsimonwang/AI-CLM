@@ -8,6 +8,7 @@ import { Icon } from "../components/icons";
 import { DocumentPanel } from "../components/DocumentPanel";
 import { CommentThreads } from "../components/CommentThreads";
 import { AiReviewPanel } from "../components/AiReviewPanel";
+import { DockablePanel, useDockablePanel } from "../components/DockablePanel";
 import { RiskRegister } from "../components/RiskRegister";
 import { useHighlight } from "../components/highlight";
 import { useDocEdited } from "../components/docEdited";
@@ -251,51 +252,6 @@ function WorkflowProgress({
   );
 }
 
-type PanelPos = { x: number; y: number; h: number };
-
-/**
- * A movable/dockable side panel (shared by the Discussion and AI-review panels).
- * `pos === null` → docked; a `pos` → free-floating fixed box. Position persists in localStorage.
- */
-function useDockablePanel(storageKey: string, cardSelector: string) {
-  const [pos, setPos] = useState<PanelPos | null>(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem(storageKey) || "");
-      if (s && typeof s.x === "number" && typeof s.y === "number" && typeof s.h === "number") return s;
-    } catch { /* docked */ }
-    return null;
-  });
-  const dock = () => {
-    setPos(null);
-    try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
-  };
-  const startDrag = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    e.preventDefault();
-    const card = (e.currentTarget as HTMLElement).closest(cardSelector) as HTMLElement | null;
-    const r = card?.getBoundingClientRect();
-    const start = { mx: e.clientX, my: e.clientY, x: r?.left ?? 12, y: r?.top ?? 12, h: Math.round(r?.height ?? 500) };
-    document.body.style.userSelect = "none";
-    const move = (ev: globalThis.MouseEvent) => {
-      const x = Math.max(0, Math.min(window.innerWidth - 300, start.x + ev.clientX - start.mx));
-      const y = Math.max(8, Math.min(window.innerHeight - 200, start.y + ev.clientY - start.my));
-      setPos({ x, y, h: start.h });
-    };
-    const up = () => {
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      setPos((p) => {
-        if (p) { try { localStorage.setItem(storageKey, JSON.stringify(p)); } catch { /* ignore */ } }
-        return p;
-      });
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
-  return { pos, dock, startDrag };
-}
-
 export default function ContractDetail() {
   const { id } = useParams();
   const location = useLocation();
@@ -320,46 +276,9 @@ export default function ContractDetail() {
     try { localStorage.setItem("clm-contract-discussion", v ? "1" : "0"); } catch { /* ignore */ }
   };
   // The discussion panel is DOCKED (a left column, full viewport-height, sticky) by default.
-  // Dragging its header detaches it to a free-floating position; "Dock" snaps it back.
-  const [panelPos, setPanelPos] = useState<{ x: number; y: number; h: number } | null>(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem("clm-discussion-pos") || "");
-      if (s && typeof s.x === "number" && typeof s.y === "number" && typeof s.h === "number") return s;
-    } catch { /* docked */ }
-    return null;
-  });
-  const dockPanel = () => {
-    setPanelPos(null);
-    try { localStorage.removeItem("clm-discussion-pos"); } catch { /* ignore */ }
-  };
-  const startPanelDrag = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    e.preventDefault();
-    const card = (e.currentTarget as HTMLElement).closest("[data-discussion-card]") as HTMLElement | null;
-    const r = card?.getBoundingClientRect();
-    const start = {
-      mx: e.clientX, my: e.clientY,
-      x: r?.left ?? 12, y: r?.top ?? 12, h: Math.round(r?.height ?? 500),
-    };
-    document.body.style.userSelect = "none";
-    const move = (ev: MouseEvent) => {
-      const x = Math.max(0, Math.min(window.innerWidth - 300, start.x + ev.clientX - start.mx));
-      const y = Math.max(8, Math.min(window.innerHeight - 200, start.y + ev.clientY - start.my));
-      setPanelPos({ x, y, h: start.h });
-    };
-    const up = () => {
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      setPanelPos((p) => {
-        if (p) { try { localStorage.setItem("clm-discussion-pos", JSON.stringify(p)); } catch { /* ignore */ } }
-        return p;
-      });
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
-  // AI document review — a movable/dockable/closable panel, same as the discussion panel.
+  // Dragging its header detaches it to a free-floating box (movable + resizable); "Dock" snaps back.
+  const disc = useDockablePanel("clm-discussion-pos", "[data-discussion-card]", { defaultW: 360, defaultDockW: 340 });
+  // AI document review — a movable/dockable/resizable/closable panel, same as the discussion panel.
   const [reviewOpen, setReviewOpen] = useState(() => {
     try { return localStorage.getItem("clm-contract-airev") === "1"; } catch { return false; }
   });
@@ -367,7 +286,7 @@ export default function ContractDetail() {
     setReviewOpen(v);
     try { localStorage.setItem("clm-contract-airev", v ? "1" : "0"); } catch { /* ignore */ }
   };
-  const review = useDockablePanel("clm-airev-pos", "[data-airev-card]");
+  const review = useDockablePanel("clm-airev-pos", "[data-airev-card]", { defaultW: 400, defaultDockW: 380 });
 
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
@@ -940,37 +859,27 @@ export default function ContractDetail() {
         )}
       </Card>
 
-      {discussionOpen && panelPos && (
-        <DiscussionCard
-          entityId={id!}
-          count={d.discussionCount}
-          onClose={() => toggleDiscussion(false)}
-          onGrab={startPanelDrag}
-          onDock={dockPanel}
-          style={{ position: "fixed", zIndex: 40, left: panelPos.x, top: panelPos.y, width: 340, height: panelPos.h }}
-        />
-      )}
-      {reviewOpen && review.pos && (
-        <ReviewCard
-          contractId={id!}
-          onClose={() => toggleReview(false)}
-          onGrab={review.startDrag}
-          onDock={review.dock}
-          style={{ position: "fixed", zIndex: 40, left: review.pos.x, top: review.pos.y, width: 380, height: review.pos.h }}
-        />
-      )}
-
       <div className="lg:flex lg:gap-3 lg:items-start">
-        {discussionOpen && !panelPos && (
-          <aside className="lg:w-[340px] lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:h-[calc(100vh-1.5rem)] max-lg:mb-4">
-            <DiscussionCard
-              entityId={id!}
-              count={d.discussionCount}
-              onClose={() => toggleDiscussion(false)}
-              onGrab={startPanelDrag}
-              docked
-            />
-          </aside>
+        {discussionOpen && (
+          <DockablePanel
+            title="Discussion"
+            icon={<Icon.message width={14} height={14} />}
+            cardAttr="data-discussion-card"
+            pos={disc.pos}
+            dockW={disc.dockW}
+            headerExtra={
+              d.discussionCount ? <span className="text-xs text-ink-faint">({d.discussionCount})</span> : undefined
+            }
+            onGrab={disc.startDrag}
+            onDock={disc.pos ? disc.dock : undefined}
+            onClose={() => toggleDiscussion(false)}
+            onResize={disc.startResize}
+            onDockResize={disc.startDockResize}
+          >
+            <div className="h-full overflow-y-auto p-3">
+              <CommentThreads entityType="CONTRACT" entityId={id!} />
+            </div>
+          </DockablePanel>
         )}
         <div className="min-w-0 lg:flex-1 space-y-4">
           {(!discussionOpen || !reviewOpen) && (
@@ -1450,15 +1359,23 @@ export default function ContractDetail() {
         </Card>
       )}
         </div>
-        {reviewOpen && !review.pos && (
-          <aside className="lg:w-[380px] lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:h-[calc(100vh-1.5rem)] max-lg:mt-4">
-            <ReviewCard
-              contractId={id!}
-              onClose={() => toggleReview(false)}
-              onGrab={review.startDrag}
-              docked
-            />
-          </aside>
+        {reviewOpen && (
+          <DockablePanel
+            title="AI review"
+            icon={<Icon.sparkle width={14} height={14} style={{ color: "var(--ai)" }} />}
+            cardAttr="data-airev-card"
+            pos={review.pos}
+            dockW={review.dockW}
+            onGrab={review.startDrag}
+            onDock={review.pos ? review.dock : undefined}
+            onClose={() => toggleReview(false)}
+            onResize={review.startResize}
+            onDockResize={review.startDockResize}
+          >
+            <div className="h-full overflow-y-auto p-3">
+              <AiReviewPanel contractId={id!} bare />
+            </div>
+          </DockablePanel>
         )}
       </div>
 
@@ -1532,121 +1449,6 @@ export default function ContractDetail() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * The discussion panel. Rendered inside a sticky full-height left column when docked (default),
- * or as a free-floating fixed box once dragged (`style` supplied + `onDock` shown).
- */
-function DiscussionCard({
-  entityId,
-  count,
-  onClose,
-  onGrab,
-  onDock,
-  docked,
-  style,
-}: {
-  entityId: string;
-  count?: number;
-  onClose: () => void;
-  onGrab: (e: React.MouseEvent) => void;
-  onDock?: () => void;
-  docked?: boolean;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <div
-      data-discussion-card
-      className={
-        "flex flex-col rounded-xl border border-border bg-surface " +
-        (docked ? "h-full shadow-sm" : "max-w-[92vw] shadow-2xl")
-      }
-      style={style}
-    >
-      <div
-        className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border cursor-move select-none rounded-t-xl shrink-0"
-        style={{ background: "var(--surface-2)" }}
-        onMouseDown={onGrab}
-        title="Drag to detach / move"
-      >
-        <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5 min-w-0">
-          <span aria-hidden className="tracking-[0.15em] text-ink-faint leading-none">⠿</span>
-          <Icon.message width={14} height={14} /> Discussion
-          {count ? <span className="text-ink-faint">({count})</span> : null}
-        </span>
-        <span className="flex items-center gap-1.5 shrink-0">
-          {onDock && (
-            <button className="text-xs link" title="Dock to the left" onClick={onDock}>
-              Dock
-            </button>
-          )}
-          <button className="btn !p-1 !border-0" title="Hide discussion panel" onClick={onClose}>
-            <Icon.x width={14} height={14} />
-          </button>
-        </span>
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
-        <CommentThreads entityType="CONTRACT" entityId={entityId} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * The AI document review panel wrapped in the same movable/dockable chrome as DiscussionCard.
- * Docked → sticky full-height right column; dragged → free-floating fixed box.
- */
-function ReviewCard({
-  contractId,
-  onClose,
-  onGrab,
-  onDock,
-  docked,
-  style,
-}: {
-  contractId: string;
-  onClose: () => void;
-  onGrab: (e: React.MouseEvent) => void;
-  onDock?: () => void;
-  docked?: boolean;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <div
-      data-airev-card
-      className={
-        "flex flex-col rounded-xl border border-border bg-surface " +
-        (docked ? "h-full shadow-sm" : "max-w-[92vw] shadow-2xl")
-      }
-      style={style}
-    >
-      <div
-        className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border cursor-move select-none rounded-t-xl shrink-0"
-        style={{ background: "var(--surface-2)" }}
-        onMouseDown={onGrab}
-        title="Drag to detach / move"
-      >
-        <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5 min-w-0">
-          <span aria-hidden className="tracking-[0.15em] text-ink-faint leading-none">⠿</span>
-          <Icon.sparkle width={14} height={14} /> AI review
-        </span>
-        <span className="flex items-center gap-1.5 shrink-0">
-          {onDock && (
-            <button className="text-xs link" title="Dock to the right" onClick={onDock}>
-              Dock
-            </button>
-          )}
-          <button className="btn !p-1 !border-0" title="Hide AI review panel" onClick={onClose}>
-            <Icon.x width={14} height={14} />
-          </button>
-        </span>
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
-        <AiReviewPanel contractId={contractId} bare />
-      </div>
     </div>
   );
 }
