@@ -7,6 +7,19 @@ export type ResizeDir = "e" | "s" | "se" | "ne";
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
 
+// One-time-per-browser-session "Drag here to move" hint on the panel header. The first
+// DockablePanel rendered in a session shows it; the flash + bubble time out purely via CSS.
+let dragHintClaimed = false;
+function claimDragHint(): boolean {
+  if (dragHintClaimed) return false;
+  dragHintClaimed = true;
+  try {
+    if (sessionStorage.getItem("clm.dragHintSeen") === "1") return false;
+    sessionStorage.setItem("clm.dragHintSeen", "1");
+  } catch { /* private mode: still show once this load */ }
+  return true;
+}
+
 type Opts = { defaultW?: number; defaultH?: number; defaultDockW?: number };
 
 /**
@@ -176,6 +189,10 @@ export function DockablePanel({
       <path d="M9 1v8H1M9 5H5v4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
+
+  // one-time-per-session "Drag here to move" hint — claimed at first render, timed out by CSS
+  const [hint] = useState(claimDragHint);
+
   return (
     <div
       {...{ [cardAttr]: "" }}
@@ -194,8 +211,9 @@ export function DockablePanel({
     >
       <div
         className={
-          "flex items-center justify-between gap-2 py-2 border-b border-border cursor-move select-none shrink-0 " +
-          (floating ? "pl-3 pr-6" : "px-3")
+          "relative flex items-center justify-between gap-2 py-2 border-b border-border cursor-move select-none shrink-0 " +
+          (floating ? "pl-3 pr-6" : "px-3") +
+          (hint ? " dock-hint-flash" : "")
         }
         style={{ background: "var(--surface-2)" }}
         onMouseDown={onGrab}
@@ -217,6 +235,15 @@ export function DockablePanel({
             <Icon.x width={14} height={14} />
           </button>
         </span>
+        {hint && (
+          <div
+            className="dock-hint-bubble absolute left-2 top-full mt-1 z-[60] inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-white shadow-lg pointer-events-none whitespace-nowrap"
+            style={{ background: "var(--accent)" }}
+          >
+            <span aria-hidden className="tracking-[0.12em] leading-none">⠿</span>
+            Drag here to move
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">{children}</div>

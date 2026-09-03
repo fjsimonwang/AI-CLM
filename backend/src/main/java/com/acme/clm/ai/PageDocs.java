@@ -76,7 +76,9 @@ public final class PageDocs {
             free-floating box; then drag any edge or the top-right / bottom-right corner to resize;
             "Dock" snaps it back to a column beside the form, whose width you set by dragging the
             column's right edge; "×" hides it). Hidden, an "AI assistant" button above the form
-            brings it back. The Request details form fills the rest of the width.
+            brings it back. The Request details form fills the rest of the width. (All the movable
+            panels flash their header with a "Drag here to move" bubble once, on the first one you
+            see in a browser session.)
             Arriving here via "Revise & resubmit" on a rejected request loads that request's saved
             session instead of a fresh one, with a red "Revising a returned request" banner showing
             why it was sent back; edits + regenerate + resubmit update the same contract. On a
