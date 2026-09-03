@@ -99,7 +99,10 @@ public final class PageDocs {
             "Save N edit(s)" button flushes pending edits. Also: "Third-party paper" card (with
             sandboxed "Preview"), green "All required info is captured" notice when ready, "Expected
             routing" card (predicted triage path + score + explanation), "Precedents" card (AI-scored,
-            toggle to select one), "Supporting documents" card. Bottom: a status chip ("Still need: …"
+            toggle to select one), "Supporting documents" card ("Add supporting documents" — attach
+            NDAs, due-diligence forms etc.; these are copied onto the contract on every submit,
+            including a revise-and-resubmit, and are what the auto-rejection attachment checks read).
+            Bottom: a status chip ("Still need: …"
             or "Confirm the highlighted values first") and the "Generate Document Draft" button —
             enabled only when nothing required is missing and AI guesses are confirmed.
             After generating: "Draft ready for your review" card listing carried clause chips and AI

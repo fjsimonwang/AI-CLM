@@ -287,8 +287,30 @@ public class IntakeService {
         return m;
     }
 
+    /**
+     * Mirror the intake session's supporting attachments onto the contract. Idempotent and called
+     * on every submit (first submit AND every revise-and-resubmit) so files the requester adds
+     * while a returned request is reopened for revision actually reach the contract — the
+     * auto-rejection rules and the contract's "Supporting documents" list read the CONTRACT's
+     * attachments, not the session's.
+     */
     private void carryAttachmentsToContract(IntakeSession s, UUID contractId, UUID userId) {
-        for (IntakeAttachment a : intakeAttachments.findByIntakeSessionIdOrderByCreatedAtAsc(s.id)) {
+        List<IntakeAttachment> sessionFiles = intakeAttachments.findByIntakeSessionIdOrderByCreatedAtAsc(s.id);
+        List<ContractAttachment> existing = contractAttachments.findByContractIdOrderByCreatedAtAsc(contractId);
+        java.util.function.BiFunction<String, Long, String> key = (name, size) -> (name == null ? "" : name) + " " + size;
+        Set<String> want = sessionFiles.stream().map(a -> key.apply(a.filename, a.sizeBytes)).collect(java.util.stream.Collectors.toSet());
+        Set<String> have = new java.util.HashSet<>();
+
+        // remove contract attachments the session no longer has (all contract attachments originate here)
+        for (ContractAttachment ca : existing) {
+            String k = key.apply(ca.filename, ca.sizeBytes);
+            if (want.contains(k) && have.add(k)) continue; // keep the first of any duplicate
+            contractAttachments.delete(ca);
+        }
+        // add session attachments the contract is missing
+        for (IntakeAttachment a : sessionFiles) {
+            String k = key.apply(a.filename, a.sizeBytes);
+            if (!have.add(k)) continue; // already present (or a duplicate name+size)
             ContractAttachment ca = new ContractAttachment();
             ca.contractId = contractId;
             ca.filename = a.filename;
@@ -640,7 +662,7 @@ public class IntakeService {
                 : contractService.create(req, userId);
         UUID contractId = UUID.fromString(String.valueOf(contract.get("id")));
 
-        if (!revising) carryAttachmentsToContract(s, contractId, userId); // already carried on first submit
+        carryAttachmentsToContract(s, contractId, userId); // mirror session files onto the contract (idempotent)
 
         if (!revising && s.paperBodyHtml != null && !s.paperBodyHtml.isBlank()) {
             // document is the verbatim third-party paper — mark migrated so it stays read-only
