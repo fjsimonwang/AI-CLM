@@ -324,10 +324,11 @@ public final class PageDocs {
             take it out of the assistant's knowledge without deleting it.
             """);
         add("/login", """
-            LOGIN (/login) — email/password sign-in. The demo environment also lists demo accounts
-            grouped by role; clicking one signs in as that user after a quick arithmetic
-            "not a robot" check — which is only asked once per browser session. Not part of the
-            signed-in experience.
+            LOGIN (/login) — email/password sign-in (the fields start empty). The demo environment
+            also lists demo accounts grouped by role, in the order Requestor → Approver → Legal →
+            General counsel → Finance → Admin; clicking a name signs in as that user after a quick
+            arithmetic "not a robot" check — which is only asked once per browser session. Not part
+            of the signed-in experience.
             """);
     }
 
