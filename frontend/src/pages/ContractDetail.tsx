@@ -323,6 +323,16 @@ export default function ContractDetail() {
     a.click();
     URL.revokeObjectURL(url);
   }
+  const [removeArm, setRemoveArm] = useState<string | null>(null);
+  const removeAttachment = useMutation({
+    mutationFn: (attachmentId: string) =>
+      api(`/contracts/${id}/attachments/${attachmentId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setRemoveArm(null);
+      qc.invalidateQueries({ queryKey: ["contract-attachments", id] });
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+    },
+  });
   const detectRelations = useMutation({
     mutationFn: () => api(`/contracts/${id}/relations/detect`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["relations", id] }),
@@ -369,6 +379,25 @@ export default function ContractDetail() {
       nav("/intake", {
         state: { reviseSessionId: s.id, reviseContractId: id, reviseReason: (c.data as any)?.rejectionReason },
       }),
+  });
+  // recall from review → back to draft AND reopen the intake session so the form is editable again
+  const recall = useMutation({
+    mutationFn: async () => {
+      await api(`/contracts/${id}/status`, { method: "PATCH", json: { status: "DRAFT" } });
+      return api(`/intake/revise/${id}`, { method: "POST" });
+    },
+    onSuccess: (s: any) => {
+      setLifecycle(null);
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+      qc.invalidateQueries({ queryKey: ["me-summary"] });
+      nav("/intake", { state: { reviseSessionId: s.id, reviseContractId: id } });
+    },
+    onError: () => {
+      // the status change may have succeeded even if reopening the session failed — refresh
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["wf", id] });
+    },
   });
   const actOnTask = useMutation({
     mutationFn: (p: { taskId: string; event: string; comment?: string }) =>
@@ -487,30 +516,31 @@ export default function ContractDetail() {
               {lifecycle === "close"
                 ? "This closes the rejected request for good. It stays on record as closed but no longer needs action and can't be resubmitted."
                 : lifecycle === "recall"
-                ? "This pulls the request out of approval and back to draft. The current approval task is cancelled; you can edit and resubmit when ready."
+                ? "This pulls the request out of approval and cancels the current approval task, then reopens it in the New request form so you can edit and resubmit."
                 : "This abandons the draft request. It stays on record as cancelled and can't be resubmitted."}
             </p>
-            {(setStatus.error as any)?.message && (
-              <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{(setStatus.error as any).message}</div>
+            {((setStatus.error as any)?.message || (recall.error as any)?.message) && (
+              <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>
+                {(setStatus.error as any)?.message || (recall.error as any)?.message}
+              </div>
             )}
             <div className="flex justify-end gap-2 mt-5">
               <button className="btn" onClick={() => setLifecycle(null)}>Go back</button>
               <button
                 className="btn btn-primary"
                 style={lifecycle === "recall" ? {} : { background: "var(--risk)", borderColor: "var(--risk)" }}
-                disabled={setStatus.isPending}
-                onClick={() =>
-                  setStatus.mutate(
-                    lifecycle === "close" ? "CLOSED_REJECTED" : lifecycle === "recall" ? "DRAFT" : "CANCELLED",
-                  )
-                }
+                disabled={setStatus.isPending || recall.isPending}
+                onClick={() => {
+                  if (lifecycle === "recall") { recall.reset(); recall.mutate(); }
+                  else setStatus.mutate(lifecycle === "close" ? "CLOSED_REJECTED" : "CANCELLED");
+                }}
               >
-                {setStatus.isPending
+                {setStatus.isPending || recall.isPending
                   ? "Working…"
                   : lifecycle === "close"
                   ? "Close request"
                   : lifecycle === "recall"
-                  ? "Recall to draft"
+                  ? "Recall & edit"
                   : "Cancel request"}
               </button>
             </div>
@@ -740,10 +770,10 @@ export default function ContractDetail() {
             {d.status === "IN_REVIEW" && (
               <button
                 className="btn"
-                disabled={setStatus.isPending}
-                onClick={() => { setStatus.reset(); setLifecycle("recall"); }}
+                disabled={setStatus.isPending || recall.isPending}
+                onClick={() => { setStatus.reset(); recall.reset(); setLifecycle("recall"); }}
               >
-                Recall to draft
+                Recall &amp; edit
               </button>
             )}
           </>
@@ -1074,9 +1104,39 @@ export default function ContractDetail() {
                     >
                       <Icon.externalLink width={13} height={13} /> Download
                     </button>
+                    {d.status === "DRAFT" && isRequestor && (
+                      removeArm === a.id ? (
+                        <span className="flex items-center gap-1 shrink-0">
+                          <button
+                            className="btn shrink-0"
+                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.8125rem", borderColor: "var(--risk)", color: "var(--risk)" }}
+                            disabled={removeAttachment.isPending}
+                            onClick={() => removeAttachment.mutate(a.id)}
+                          >
+                            {removeAttachment.isPending ? "Removing…" : "Remove"}
+                          </button>
+                          <button className="btn shrink-0" style={{ padding: "0.25rem 0.5rem", fontSize: "0.8125rem" }} onClick={() => setRemoveArm(null)}>
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          className="shrink-0 text-ink-faint hover:text-[color:var(--risk)] transition-colors"
+                          title="Remove this document"
+                          onClick={() => setRemoveArm(a.id)}
+                        >
+                          <Icon.x width={14} height={14} />
+                        </button>
+                      )
+                    )}
                   </div>
                 ))}
               </div>
+              {removeAttachment.error && (
+                <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>
+                  {(removeAttachment.error as any).message}
+                </div>
+              )}
             </Card>
           )}
         </div>

@@ -129,11 +129,13 @@ public final class PageDocs {
             (→ CANCELLED); on a DRAFT that an approver rejected (shows a red rejection banner with
             the reason — "returned to you" for the requestor, "returned to the requestor" for
             anyone else viewing it) — "Revise & resubmit" and "Close request"
-            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". "Revise & resubmit" reopens the
-            request's intake session and takes you to the New request page with the conversation
-            and form loaded, so you can edit the details and resubmit — it updates the SAME
-            contract (keeps its number, bumps a draft version), it does not create a new one.
-            "Cancel request", "Close request" and "Recall to draft" each ask for confirmation.
+            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall & edit". Both "Revise & resubmit" and
+            "Recall & edit" reopen the request's intake session and take you to the New request page
+            with the conversation and form loaded, so you can edit the details (and add/remove
+            supporting documents) and resubmit — it updates the SAME contract (keeps its number,
+            bumps a draft version), it does not create a new one. "Recall & edit" first pulls the
+            contract out of review and cancels the open approval task.
+            "Cancel request", "Close request" and "Recall & edit" each ask for confirmation.
             Cancelled and closed contracts are terminal — they can't be resubmitted and stop
             appearing in dashboard open items.
             When the workflow reaches the signature step (assigned to the requestor), the header
@@ -181,7 +183,8 @@ public final class PageDocs {
             confidence); "Document" (document editor with Read/Edit toggle when EDIT_CONTRACT, autosave,
             "Re-assemble" — rebuilds the document from the current template + clauses, discarding manual
             edits; this is the ONLY thing that regenerates the document, resubmitting a revised request
-            never does — "Open full", supporting documents with "Download". The AI review panel is
+            never does — "Open full", supporting documents with "Download" (and, while the contract
+            is still a DRAFT, an "×" to remove one — the requestor only). The AI review panel is
             not part of this tab — it is the separate dockable "AI review" panel, see above);
             "Workflow" (workflow name, current state badge, "Start workflow", task list showing each
             task's outcome, completion date and the approve/reject note — a rejection reason is

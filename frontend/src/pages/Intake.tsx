@@ -834,7 +834,9 @@ export default function Intake() {
             className="px-4 py-2 border-b text-xs"
             style={{ borderColor: "var(--risk)", background: "color-mix(in srgb, var(--risk) 8%, transparent)" }}
           >
-            <span className="font-medium" style={{ color: "var(--risk)" }}>Revising a returned request.</span>{" "}
+            <span className="font-medium" style={{ color: "var(--risk)" }}>
+              {reviseReason ? "Revising a returned request." : "Editing a recalled request."}
+            </span>{" "}
             {reviseReason ? <span className="text-ink-soft">Reason it was sent back: {reviseReason}</span> : null}
             <span className="text-ink-faint"> Update the details on the right, then generate and resubmit — it updates the same request.</span>
           </div>

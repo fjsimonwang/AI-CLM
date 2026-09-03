@@ -383,8 +383,8 @@ public class IntakeService {
         if (!userId.equals(c.ownerUserId) && !userId.equals(c.createdBy)) {
             throw new ApiExceptions.ForbiddenException("Only the requester can revise this request.");
         }
-        if (!"DRAFT".equals(c.status) || c.rejectionReason == null) {
-            throw new ApiExceptions.BadRequestException("Only a rejected request can be revised.");
+        if (!"DRAFT".equals(c.status)) {
+            throw new ApiExceptions.BadRequestException("Only a draft request can be edited — recall it from review first.");
         }
         if (c.intakeSessionId == null) {
             throw new ApiExceptions.BadRequestException("This contract was not created through intake.");
