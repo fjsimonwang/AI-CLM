@@ -24,11 +24,14 @@ public class ContractController {
     private final AccessService access;
     private final Repos.Contracts contracts;
     private final Repos.ContractAttachments contractAttachments;
+    private final Repos.IntakeAttachments intakeAttachments;
+    private final com.acme.clm.service.AuditService audit;
     private final CurrentUser current;
 
     public ContractController(ContractService service, EffectiveTermsResolver effectiveTerms,
                               com.acme.clm.service.RiskService risks, AccessService access,
                               Repos.Contracts contracts, Repos.ContractAttachments contractAttachments,
+                              Repos.IntakeAttachments intakeAttachments, com.acme.clm.service.AuditService audit,
                               CurrentUser current) {
         this.service = service;
         this.effectiveTerms = effectiveTerms;
@@ -36,6 +39,8 @@ public class ContractController {
         this.access = access;
         this.contracts = contracts;
         this.contractAttachments = contractAttachments;
+        this.intakeAttachments = intakeAttachments;
+        this.audit = audit;
         this.current = current;
     }
 
@@ -153,6 +158,40 @@ public class ContractController {
                         .replace("+", "%20"))
                 .header("Content-Type", a.contentType == null ? "application/octet-stream" : a.contentType)
                 .body(a.content);
+    }
+
+    /** Remove a supporting document. Only the requestor, and only while the contract is a DRAFT. */
+    @DeleteMapping("/{id}/attachments/{attachmentId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('PERM_VIEW_CONTRACTS')")
+    public List<Map<String, Object>> deleteAttachment(@PathVariable UUID id, @PathVariable UUID attachmentId) {
+        Contract c = contracts.findById(id)
+                .orElseThrow(() -> new com.acme.clm.common.ApiExceptions.NotFoundException("Contract not found"));
+        if (!access.canView(current.id(), c))
+            throw new com.acme.clm.common.ApiExceptions.NotFoundException("Contract not found");
+        boolean requestor = current.id().equals(c.ownerUserId) || current.id().equals(c.createdBy);
+        if (!requestor)
+            throw new com.acme.clm.common.ApiExceptions.ForbiddenException("Only the requestor can remove supporting documents.");
+        if (!"DRAFT".equals(c.status))
+            throw new com.acme.clm.common.ApiExceptions.BadRequestException("Supporting documents can only be changed while the request is a draft.");
+
+        ContractAttachment a = contractAttachments.findById(attachmentId)
+                .filter(x -> id.equals(x.contractId))
+                .orElseThrow(() -> new com.acme.clm.common.ApiExceptions.NotFoundException("Attachment not found"));
+        contractAttachments.delete(a);
+        // keep the originating intake session in sync so a resubmit doesn't re-add the file
+        if (c.intakeSessionId != null) {
+            intakeAttachments.findByIntakeSessionIdOrderByCreatedAtAsc(c.intakeSessionId).stream()
+                    .filter(ia -> java.util.Objects.equals(ia.filename, a.filename) && ia.sizeBytes == a.sizeBytes)
+                    .forEach(intakeAttachments::delete);
+        }
+        audit.record("CONTRACT", id.toString(), "ATTACHMENT_REMOVED", current.id(), null,
+                Map.of("file", a.filename == null ? "" : a.filename));
+        return contractAttachments.findByContractIdOrderByCreatedAtAsc(id).stream()
+                .<Map<String, Object>>map(x -> Map.of(
+                        "id", x.id, "filename", x.filename,
+                        "contentType", x.contentType == null ? "" : x.contentType,
+                        "size", x.sizeBytes, "createdAt", x.createdAt))
+                .toList();
     }
 
     private void requireCanView(UUID contractId) {

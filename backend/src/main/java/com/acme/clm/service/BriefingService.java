@@ -37,16 +37,19 @@ public class BriefingService {
     private final Repos.WorkflowTasks tasks;
     private final Repos.WorkflowInstances instances;
     private final Repos.IntakeSessions intakeSessions;
+    private final Repos.LegalEntities entities;
     private final AiService ai;
 
     public BriefingService(Repos.ContractBriefings briefings, Repos.Contracts contracts,
                            Repos.WorkflowTasks tasks, Repos.WorkflowInstances instances,
-                           Repos.IntakeSessions intakeSessions, AiService ai) {
+                           Repos.IntakeSessions intakeSessions, Repos.LegalEntities entities,
+                           AiService ai) {
         this.briefings = briefings;
         this.contracts = contracts;
         this.tasks = tasks;
         this.instances = instances;
         this.intakeSessions = intakeSessions;
+        this.entities = entities;
         this.ai = ai;
     }
 
@@ -139,11 +142,17 @@ public class BriefingService {
         Map<String, Object> attrs = Json.readMap(c.typeAttributes);
         Map<String, Object> compact = new LinkedHashMap<>();
         attrs.forEach((k, v) -> { if (v != null && !String.valueOf(v).isBlank()) compact.put(k, v); });
-        return "Contract %s (%s), entity %s, governing law %s, status %s, value %s %s, annual value %s, "
-                + "effective %s, expiry %s, payment terms %s days. type_attributes: %s. Existing note: %s"
-                .formatted(c.contractNumber, c.contractTypeCode, c.contractingEntityId, c.governingLawCode,
+        String entityName = c.contractingEntityId == null ? "n/a"
+                : entities.findById(c.contractingEntityId).map(e -> e.legalName).orElse(c.contractingEntityId.toString());
+        String paymentTerms = c.paymentTermsDays == null ? "not set" : c.paymentTermsDays + " days";
+        // NOTE: parenthesise the whole concatenation before .formatted — `.formatted` binds tighter
+        // than `+`, so without the parens only the last literal receives the arguments and every
+        // field lands in the wrong %s (this put the entity UUID into "payment terms … days").
+        return ("Contract %s (%s), entity %s, governing law %s, status %s, value %s %s, annual value %s, "
+                + "effective %s, expiry %s, payment terms %s. type_attributes: %s. Existing note: %s")
+                .formatted(c.contractNumber, c.contractTypeCode, entityName, c.governingLawCode,
                         c.status, c.valueAmount, c.currency, c.annualValueAmount,
-                        c.effectiveDate, c.expiryDate, c.paymentTermsDays,
+                        c.effectiveDate, c.expiryDate, paymentTerms,
                         Json.write(compact), c.summary);
     }
 

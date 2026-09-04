@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
- * The single per-user switch behind the header "Agent talk" toggle. When a user turns it off it
+ * The single per-user switch behind the header "Agent Crew" toggle. When a user turns it off it
  * disables ALL of their working-alongside-you AI: the dashboard AI insight, approver AI briefings,
  * and agent participation in contract discussions.
  */

@@ -8,6 +8,7 @@ import { Icon } from "../components/icons";
 import { DocumentPanel } from "../components/DocumentPanel";
 import { CommentThreads } from "../components/CommentThreads";
 import { AiReviewPanel } from "../components/AiReviewPanel";
+import { DockablePanel, useDockablePanel } from "../components/DockablePanel";
 import { RiskRegister } from "../components/RiskRegister";
 import { useHighlight } from "../components/highlight";
 import { useDocEdited } from "../components/docEdited";
@@ -43,6 +44,214 @@ const renderSummaryWithSession = (summary: string, sessionId: string) => {
   );
 };
 
+const WF_STATE_LABELS: Record<string, string> = {
+  owner_approval: "Manager approval",
+  legal_review: "Legal review",
+  drafting: "Requestor revision",
+  finance_review: "Finance approval",
+  finance_approval: "Finance approval",
+  signature: "Signature",
+  executed: "Executed",
+  closed_rejected: "Rejected",
+};
+const wfLabel = (key: string) =>
+  WF_STATE_LABELS[key] ||
+  key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+type StepState = "done" | "current" | "todo" | "rejected";
+type ProgressStep = { key: string; label: string; state: StepState; pending?: string };
+
+/**
+ * Horizontal flow bar showing where the contract sits in its approval workflow.
+ * When a workflow instance is running (or completed) it renders that workflow's
+ * own states; otherwise it falls back to the generic Draft → In review → Executed
+ * lifecycle keyed off the contract status.
+ */
+function WorkflowProgress({
+  wf,
+  contractStatus,
+  rejectionReason,
+}: {
+  wf: any;
+  contractStatus: string;
+  rejectionReason?: string | null;
+}) {
+  const started = !!wf?.started && Array.isArray(wf?.states) && wf.states.length > 0;
+
+  let title = "Contract lifecycle";
+  let steps: ProgressStep[] = [];
+  let note: { text: string; tone: "risk" | "muted" } | null = null;
+
+  if (started) {
+    title = wf.workflowName || "Approval workflow";
+    const order = wf.states.filter((s: any) => s.key !== "closed_rejected");
+    const curKey: string = wf.currentState;
+    const curIdx = order.findIndex((s: any) => s.key === curKey);
+    const completed = wf.status === "COMPLETED";
+    const executed = completed && curKey === "executed";
+    const doneStates = new Set(
+      (wf.tasks || [])
+        .filter((t: any) => t.status !== "OPEN" && t.outcome && t.outcome !== "reject")
+        .map((t: any) => t.state),
+    );
+    const openTasks = (wf.tasks || []).filter((t: any) => t.status === "OPEN");
+    const pendingTask =
+      openTasks.find((t: any) => t.state === curKey) || openTasks[0] || null;
+    // who the current step is waiting on: the named individual, else the team/role
+    const pendingWho = pendingTask
+      ? pendingTask.assignee || pendingTask.roleLabel || null
+      : null;
+    // the requestor's submission is always the first step of the flow (a running or completed
+    // workflow means the request was submitted)
+    steps = [
+      { key: "submitted", label: "Submitted", state: "done" as StepState },
+      ...order.map((s: any, i: number) => {
+        let state: StepState = "todo";
+        if (executed) state = "done";
+        else if (s.key === curKey && wf.status === "RUNNING") state = "current";
+        else if (doneStates.has(s.key) || (curIdx >= 0 && i < curIdx)) state = "done";
+        return {
+          key: s.key,
+          label: wfLabel(s.key),
+          state,
+          pending: state === "current" && pendingWho ? pendingWho : undefined,
+        };
+      }),
+    ];
+  } else {
+    const returned = contractStatus === "DRAFT" && !!rejectionReason;
+    if (contractStatus === "CANCELLED") {
+      steps = [
+        { key: "draft", label: "Draft", state: "done" },
+        { key: "cancelled", label: "Cancelled", state: "rejected" },
+      ];
+      note = { text: "This request was cancelled by the requestor.", tone: "muted" };
+    } else if (contractStatus === "CLOSED_REJECTED") {
+      steps = [
+        { key: "draft", label: "Draft", state: "done" },
+        { key: "review", label: "In review", state: "rejected" },
+        { key: "closed", label: "Closed", state: "todo" },
+      ];
+      note = { text: "Rejected in approval and closed by the requestor.", tone: "risk" };
+    } else {
+      // Draft -> Submitted -> In review -> Executed
+      const idx = contractStatus === "EXECUTED" ? 3 : contractStatus === "IN_REVIEW" ? 2 : 0;
+      steps = [
+        { key: "draft", label: "Draft" },
+        { key: "submitted", label: "Submitted" },
+        { key: "review", label: "In review" },
+        { key: "executed", label: "Executed" },
+      ].map((s, i) => ({
+        ...s,
+        state: (idx === 3 ? "done" : i < idx ? "done" : i === idx ? "current" : "todo") as StepState,
+      }));
+      if (returned)
+        note = {
+          text: "Returned to the requestor after rejection — revise & resubmit or close it out.",
+          tone: "risk",
+        };
+    }
+  }
+
+  const statusLabel =
+    contractStatus === "IN_REVIEW"
+      ? "In review"
+      : contractStatus.charAt(0) + contractStatus.slice(1).toLowerCase().replace(/_/g, " ");
+
+  return (
+    <Card className="fade-in">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <span className="text-sm font-medium text-ink-soft uppercase tracking-wide">{title}</span>
+        <Badge tone={statusTone(contractStatus)}>{statusLabel}</Badge>
+      </div>
+      <ol className="flex items-start">
+        {steps.map((s, i) => {
+          const last = i === steps.length - 1;
+          const prevDone = i > 0 && steps[i - 1].state === "done";
+          // the segment INTO this step is green once the previous step is done — so the green
+          // track reaches the active step, not just the last completed one
+          const leadInGreen = prevDone;
+          const connectorDone = s.state === "done";
+          return (
+            <li key={s.key} className="flex-1 flex flex-col items-center text-center min-w-0">
+              <div className="flex items-center w-full">
+                <span
+                  className="h-[2px] flex-1 rounded"
+                  style={{
+                    background: i === 0 ? "transparent" : leadInGreen ? "var(--ok)" : "var(--border)",
+                  }}
+                />
+                <span
+                  className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px]"
+                  style={
+                    s.state === "done"
+                      ? { background: "var(--ok)", color: "#fff" }
+                      : s.state === "current"
+                        ? { border: "2px solid var(--accent)", background: "var(--surface)" }
+                        : s.state === "rejected"
+                          ? { background: "var(--risk)", color: "#fff" }
+                          : { border: "2px solid var(--border)", background: "var(--surface)" }
+                  }
+                >
+                  {s.state === "done" ? (
+                    <svg viewBox="0 0 12 12" width={11} height={11}>
+                      <path
+                        d="M2.5 6.5 L5 9 L9.5 3.5"
+                        fill="none"
+                        stroke="#fff"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : s.state === "rejected" ? (
+                    "✕"
+                  ) : s.state === "current" ? (
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />
+                  ) : (
+                    <span className="text-ink-faint">{i + 1}</span>
+                  )}
+                </span>
+                <span
+                  className="h-[2px] flex-1 rounded"
+                  style={{
+                    background: last ? "transparent" : connectorDone ? "var(--ok)" : "var(--border)",
+                  }}
+                />
+              </div>
+              <span
+                className={`mt-1.5 text-xs leading-tight px-1 ${
+                  s.state === "todo" ? "text-ink-faint" : "text-ink"
+                }`}
+              >
+                {s.label}
+              </span>
+              {s.state === "current" && (
+                <span className="text-[11px] mt-0.5" style={{ color: "var(--accent)" }}>
+                  In progress
+                </span>
+              )}
+              {s.pending && (
+                <span className="text-[11px] mt-0.5 text-ink-soft leading-tight">
+                  Pending: {s.pending}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {note && (
+        <p
+          className="text-xs mt-3"
+          style={{ color: note.tone === "risk" ? "var(--risk)" : "var(--ink-faint)" }}
+        >
+          {note.text}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export default function ContractDetail() {
   const { id } = useParams();
   const location = useLocation();
@@ -67,47 +276,21 @@ export default function ContractDetail() {
     try { localStorage.setItem("clm-contract-discussion", v ? "1" : "0"); } catch { /* ignore */ }
   };
   // The discussion panel is DOCKED (a left column, full viewport-height, sticky) by default.
-  // Dragging its header detaches it to a free-floating position; "Dock" snaps it back.
-  const [panelPos, setPanelPos] = useState<{ x: number; y: number; h: number } | null>(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem("clm-discussion-pos") || "");
-      if (s && typeof s.x === "number" && typeof s.y === "number" && typeof s.h === "number") return s;
-    } catch { /* docked */ }
-    return null;
+  // Dragging its header detaches it to a free-floating box (movable + resizable); "Dock" snaps back.
+  const disc = useDockablePanel("clm-discussion-pos", "[data-discussion-card]", { defaultW: 360, defaultDockW: 340 });
+  // AI document review — a movable/dockable/resizable/closable panel, same as the discussion panel.
+  const [reviewOpen, setReviewOpen] = useState(() => {
+    try { return localStorage.getItem("clm-contract-airev") === "1"; } catch { return false; }
   });
-  const dockPanel = () => {
-    setPanelPos(null);
-    try { localStorage.removeItem("clm-discussion-pos"); } catch { /* ignore */ }
+  const toggleReview = (v: boolean) => {
+    setReviewOpen(v);
+    try { localStorage.setItem("clm-contract-airev", v ? "1" : "0"); } catch { /* ignore */ }
   };
-  const startPanelDrag = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    e.preventDefault();
-    const card = (e.currentTarget as HTMLElement).closest("[data-discussion-card]") as HTMLElement | null;
-    const r = card?.getBoundingClientRect();
-    const start = {
-      mx: e.clientX, my: e.clientY,
-      x: r?.left ?? 12, y: r?.top ?? 12, h: Math.round(r?.height ?? 500),
-    };
-    document.body.style.userSelect = "none";
-    const move = (ev: MouseEvent) => {
-      const x = Math.max(0, Math.min(window.innerWidth - 300, start.x + ev.clientX - start.mx));
-      const y = Math.max(8, Math.min(window.innerHeight - 200, start.y + ev.clientY - start.my));
-      setPanelPos({ x, y, h: start.h });
-    };
-    const up = () => {
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      setPanelPos((p) => {
-        if (p) { try { localStorage.setItem("clm-discussion-pos", JSON.stringify(p)); } catch { /* ignore */ } }
-        return p;
-      });
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
+  const review = useDockablePanel("clm-airev-pos", "[data-airev-card]", { defaultW: 400, defaultDockW: 380 });
+
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
+  const [signStep, setSignStep] = useState<null | "confirm" | "sent">(null);
   const [recordOpen, setRecordOpen] = useState(true);
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
@@ -140,6 +323,16 @@ export default function ContractDetail() {
     a.click();
     URL.revokeObjectURL(url);
   }
+  const [removeArm, setRemoveArm] = useState<string | null>(null);
+  const removeAttachment = useMutation({
+    mutationFn: (attachmentId: string) =>
+      api(`/contracts/${id}/attachments/${attachmentId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setRemoveArm(null);
+      qc.invalidateQueries({ queryKey: ["contract-attachments", id] });
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+    },
+  });
   const detectRelations = useMutation({
     mutationFn: () => api(`/contracts/${id}/relations/detect`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["relations", id] }),
@@ -186,6 +379,25 @@ export default function ContractDetail() {
       nav("/intake", {
         state: { reviseSessionId: s.id, reviseContractId: id, reviseReason: (c.data as any)?.rejectionReason },
       }),
+  });
+  // recall from review → back to draft AND reopen the intake session so the form is editable again
+  const recall = useMutation({
+    mutationFn: async () => {
+      await api(`/contracts/${id}/status`, { method: "PATCH", json: { status: "DRAFT" } });
+      return api(`/intake/revise/${id}`, { method: "POST" });
+    },
+    onSuccess: (s: any) => {
+      setLifecycle(null);
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+      qc.invalidateQueries({ queryKey: ["me-summary"] });
+      nav("/intake", { state: { reviseSessionId: s.id, reviseContractId: id } });
+    },
+    onError: () => {
+      // the status change may have succeeded even if reopening the session failed — refresh
+      qc.invalidateQueries({ queryKey: ["contract", id] });
+      qc.invalidateQueries({ queryKey: ["wf", id] });
+    },
   });
   const actOnTask = useMutation({
     mutationFn: (p: { taskId: string; event: string; comment?: string }) =>
@@ -304,33 +516,100 @@ export default function ContractDetail() {
               {lifecycle === "close"
                 ? "This closes the rejected request for good. It stays on record as closed but no longer needs action and can't be resubmitted."
                 : lifecycle === "recall"
-                ? "This pulls the request out of approval and back to draft. The current approval task is cancelled; you can edit and resubmit when ready."
+                ? "This pulls the request out of approval and cancels the current approval task, then reopens it in the New request form so you can edit and resubmit."
                 : "This abandons the draft request. It stays on record as cancelled and can't be resubmitted."}
             </p>
-            {(setStatus.error as any)?.message && (
-              <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{(setStatus.error as any).message}</div>
+            {((setStatus.error as any)?.message || (recall.error as any)?.message) && (
+              <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>
+                {(setStatus.error as any)?.message || (recall.error as any)?.message}
+              </div>
             )}
             <div className="flex justify-end gap-2 mt-5">
               <button className="btn" onClick={() => setLifecycle(null)}>Go back</button>
               <button
                 className="btn btn-primary"
                 style={lifecycle === "recall" ? {} : { background: "var(--risk)", borderColor: "var(--risk)" }}
-                disabled={setStatus.isPending}
-                onClick={() =>
-                  setStatus.mutate(
-                    lifecycle === "close" ? "CLOSED_REJECTED" : lifecycle === "recall" ? "DRAFT" : "CANCELLED",
-                  )
-                }
+                disabled={setStatus.isPending || recall.isPending}
+                onClick={() => {
+                  if (lifecycle === "recall") { recall.reset(); recall.mutate(); }
+                  else setStatus.mutate(lifecycle === "close" ? "CLOSED_REJECTED" : "CANCELLED");
+                }}
               >
-                {setStatus.isPending
+                {setStatus.isPending || recall.isPending
                   ? "Working…"
                   : lifecycle === "close"
                   ? "Close request"
                   : lifecycle === "recall"
-                  ? "Recall to draft"
+                  ? "Recall & edit"
                   : "Cancel request"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {signStep === "confirm" && activeTask && (
+        <div
+          className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(3px)" }}
+          onClick={() => setSignStep(null)}
+        >
+          <div className="modal-card card w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-medium">Send <b>{d.contractNumber}</b> for signature?</h2>
+            <p className="text-sm text-ink-soft mt-2 leading-relaxed">
+              This sends the final document to the counterparty and signatories for electronic
+              signature. When all parties have signed, the contract becomes <b>Executed</b>.
+            </p>
+            {(actOnTask.error as any)?.message && (
+              <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>{(actOnTask.error as any).message}</div>
+            )}
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn" onClick={() => setSignStep(null)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                disabled={actOnTask.isPending}
+                onClick={() =>
+                  actOnTask.mutate(
+                    { taskId: activeTask.id, event: "complete", comment: "Sent for e-signature completion." },
+                    { onSuccess: () => setSignStep("sent") },
+                  )
+                }
+              >
+                {actOnTask.isPending ? "Sending…" : "Send for signature"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {signStep === "sent" && (
+        <div
+          className="confirm-backdrop fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(15, 17, 21, 0.5)", backdropFilter: "blur(5px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSignStep(null); }}
+        >
+          <div className="confirm-card card w-full max-w-md p-8 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="relative mx-auto mb-4" style={{ width: 72, height: 72 }}>
+              <span
+                className="confirm-halo absolute inset-0 rounded-full"
+                style={{ background: "color-mix(in srgb, var(--ok) 35%, transparent)" }}
+              />
+              <svg className="confirm-check relative" viewBox="0 0 52 52" width={72} height={72}>
+                <circle cx="26" cy="26" r="24" fill="none" stroke="var(--ok)" strokeWidth="2.5" />
+                <path
+                  d="M15 27 l8 8 l15 -16"
+                  fill="none" stroke="var(--ok)" strokeWidth="3.5"
+                  strokeLinecap="round" strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h2 className="text-lg font-medium">Sent for e-signature</h2>
+            <p className="text-sm text-ink-soft mt-1">
+              <span className="font-medium tabular text-ink">{d.contractNumber}</span> has been sent to
+              the signatories to complete e-signature. All parties have signed and the contract is now{" "}
+              <b>Executed</b>.
+            </p>
+            <button className="btn btn-primary mt-5 w-full justify-center" onClick={() => setSignStep(null)}>
+              Done
+            </button>
           </div>
         </div>
       )}
@@ -456,8 +735,9 @@ export default function ContractDetail() {
             )}
           </div>
         </div>
+        <div className="flex gap-2 shrink-0 flex-wrap justify-end">
         {isRequestor && (
-          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          <>
             {d.status === "DRAFT" && d.rejectionReason && d.intakeSessionId && (
               <button className="btn btn-primary" disabled={revise.isPending} onClick={() => revise.mutate()}>
                 {revise.isPending ? "Opening…" : "Revise & resubmit"}
@@ -490,16 +770,16 @@ export default function ContractDetail() {
             {d.status === "IN_REVIEW" && (
               <button
                 className="btn"
-                disabled={setStatus.isPending}
-                onClick={() => { setStatus.reset(); setLifecycle("recall"); }}
+                disabled={setStatus.isPending || recall.isPending}
+                onClick={() => { setStatus.reset(); recall.reset(); setLifecycle("recall"); }}
               >
-                Recall to draft
+                Recall &amp; edit
               </button>
             )}
-          </div>
+          </>
         )}
         {activeTask && user?.id && activeTask.assignedUserId === user.id && (
-          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          <>
             {wfData.availableEvents?.includes("approve") && (
               <button
                 className="btn btn-primary"
@@ -519,8 +799,18 @@ export default function ContractDetail() {
                 Reject
               </button>
             )}
-          </div>
+            {wfData.availableEvents?.includes("complete") && (
+              <button
+                className="btn btn-primary"
+                disabled={actOnTask.isPending}
+                onClick={() => { actOnTask.reset(); setSignStep("confirm"); }}
+              >
+                Send for Signature
+              </button>
+            )}
+          </>
         )}
+        </div>
       </div>
 
       {d.status === "DRAFT" && d.rejectionReason && (
@@ -528,7 +818,11 @@ export default function ContractDetail() {
           className="rounded-lg border p-3 text-sm"
           style={{ borderColor: "var(--risk)", background: "color-mix(in srgb, var(--risk) 8%, transparent)" }}
         >
-          <div className="font-medium" style={{ color: "var(--risk)" }}>This request was rejected and returned to you</div>
+          <div className="font-medium" style={{ color: "var(--risk)" }}>
+            {isRequestor
+              ? "This request was rejected and returned to you"
+              : "This request was rejected and returned to the requestor"}
+          </div>
           <div className="text-ink-soft mt-1">{d.rejectionReason}</div>
           {isRequestor && (
             <div className="text-xs text-ink-faint mt-1.5">
@@ -537,6 +831,12 @@ export default function ContractDetail() {
           )}
         </div>
       )}
+
+      <WorkflowProgress
+        wf={wfData}
+        contractStatus={d.status}
+        rejectionReason={d.rejectionReason}
+      />
 
       <Card className="!p-0 overflow-hidden">
         <button
@@ -557,7 +857,7 @@ export default function ContractDetail() {
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">Summary</h2>
               {(summarize.data as any)?.aiDisabled ? (
-                <span className="text-xs text-ink-faint">AI off — enable Agent talk in the header</span>
+                <span className="text-xs text-ink-faint">AI off — enable Agent Crew in the header</span>
               ) : (
                 <button className="btn btn-ai" style={{ padding: "0.3rem 0.6rem" }} disabled={summarize.isPending} onClick={() => summarize.mutate()}>
                   <Icon.sparkle width={14} height={14} /> {summarize.isPending ? "Reviewing…" : storedBriefing ? "Regenerate AI briefing" : "Generate AI briefing"}
@@ -589,39 +889,51 @@ export default function ContractDetail() {
         )}
       </Card>
 
-      {discussionOpen && panelPos && (
-        <DiscussionCard
-          entityId={id!}
-          count={d.discussionCount}
-          onClose={() => toggleDiscussion(false)}
-          onGrab={startPanelDrag}
-          onDock={dockPanel}
-          style={{ position: "fixed", zIndex: 40, left: panelPos.x, top: panelPos.y, width: 340, height: panelPos.h }}
-        />
-      )}
-
       <div className="lg:flex lg:gap-3 lg:items-start">
-        {discussionOpen && !panelPos && (
-          <aside className="lg:w-[340px] lg:shrink-0 lg:sticky lg:top-3 lg:self-start lg:h-[calc(100vh-1.5rem)] max-lg:mb-4">
-            <DiscussionCard
-              entityId={id!}
-              count={d.discussionCount}
-              onClose={() => toggleDiscussion(false)}
-              onGrab={startPanelDrag}
-              docked
-            />
-          </aside>
+        {discussionOpen && (
+          <DockablePanel
+            title="Discussion"
+            icon={<Icon.message width={14} height={14} />}
+            cardAttr="data-discussion-card"
+            pos={disc.pos}
+            dockW={disc.dockW}
+            headerExtra={
+              d.discussionCount ? <span className="text-xs text-ink-faint">({d.discussionCount})</span> : undefined
+            }
+            onGrab={disc.startDrag}
+            onDock={disc.pos ? disc.dock : undefined}
+            onClose={() => toggleDiscussion(false)}
+            onResize={disc.startResize}
+            onDockResize={disc.startDockResize}
+          >
+            <div className="h-full overflow-y-auto p-3">
+              <CommentThreads entityType="CONTRACT" entityId={id!} />
+            </div>
+          </DockablePanel>
         )}
         <div className="min-w-0 lg:flex-1 space-y-4">
-          {!discussionOpen && (
-            <button
-              className="btn"
-              style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
-              onClick={() => toggleDiscussion(true)}
-            >
-              <Icon.message width={13} height={13} /> Show discussion
-              {d.discussionCount ? ` (${d.discussionCount})` : ""}
-            </button>
+          {(!discussionOpen || !reviewOpen) && (
+            <div className="flex flex-wrap gap-2">
+              {!discussionOpen && (
+                <button
+                  className="btn"
+                  style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+                  onClick={() => toggleDiscussion(true)}
+                >
+                  <Icon.message width={13} height={13} /> Show discussion
+                  {d.discussionCount ? ` (${d.discussionCount})` : ""}
+                </button>
+              )}
+              {!reviewOpen && (
+                <button
+                  className="btn"
+                  style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+                  onClick={() => toggleReview(true)}
+                >
+                  <Icon.sparkle width={13} height={13} /> AI review
+                </button>
+              )}
+            </div>
           )}
           <Tabs
             tabs={[
@@ -774,34 +1086,59 @@ export default function ContractDetail() {
       )}
 
       {tab === "document" && (
-        <div className="fade-in">
-        <div className="grid gap-4 items-stretch lg:grid-cols-[2fr_1fr] lg:h-[calc(0.9428*min(100vw-276px,1240px)+72px)]">
-          <div className="min-w-0 flex flex-col gap-3 lg:h-full">
-            <div className="min-w-0 flex-1 min-h-0"><DocumentPanel contractId={id!} /></div>
-            {(attachmentsQuery.data || []).length > 0 && (
-              <Card className="shrink-0">
-                <SectionTitle>Supporting documents</SectionTitle>
-                <div className="space-y-1.5">
-                  {(attachmentsQuery.data || []).map((a: any) => (
-                    <div key={a.id} className="flex items-center gap-2 rounded-[8px] border border-border p-2">
-                      <Icon.file width={15} height={15} className="shrink-0 text-ink-faint" />
-                      <span className="text-sm truncate flex-1" title={a.filename}>{a.filename}</span>
-                      <span className="text-xs text-ink-faint shrink-0">{(a.size / 1024).toFixed(0)} KB</span>
-                      <button
-                        className="btn shrink-0"
-                        style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
-                        onClick={() => downloadAttachment(a.id, a.filename)}
-                      >
-                        <Icon.externalLink width={13} height={13} /> Download
-                      </button>
-                    </div>
-                  ))}
+        <div className="fade-in flex flex-col gap-3 lg:h-[calc(0.9428*min(100vw-276px,1240px)+72px)]">
+          <div className="min-w-0 flex-1 min-h-0"><DocumentPanel contractId={id!} /></div>
+          {(attachmentsQuery.data || []).length > 0 && (
+            <Card className="shrink-0">
+              <SectionTitle>Supporting documents</SectionTitle>
+              <div className="space-y-1.5">
+                {(attachmentsQuery.data || []).map((a: any) => (
+                  <div key={a.id} className="flex items-center gap-2 rounded-[8px] border border-border p-2">
+                    <Icon.file width={15} height={15} className="shrink-0 text-ink-faint" />
+                    <span className="text-sm truncate flex-1" title={a.filename}>{a.filename}</span>
+                    <span className="text-xs text-ink-faint shrink-0">{(a.size / 1024).toFixed(0)} KB</span>
+                    <button
+                      className="btn shrink-0"
+                      style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+                      onClick={() => downloadAttachment(a.id, a.filename)}
+                    >
+                      <Icon.externalLink width={13} height={13} /> Download
+                    </button>
+                    {d.status === "DRAFT" && isRequestor && (
+                      removeArm === a.id ? (
+                        <span className="flex items-center gap-1 shrink-0">
+                          <button
+                            className="btn shrink-0"
+                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.8125rem", borderColor: "var(--risk)", color: "var(--risk)" }}
+                            disabled={removeAttachment.isPending}
+                            onClick={() => removeAttachment.mutate(a.id)}
+                          >
+                            {removeAttachment.isPending ? "Removing…" : "Remove"}
+                          </button>
+                          <button className="btn shrink-0" style={{ padding: "0.25rem 0.5rem", fontSize: "0.8125rem" }} onClick={() => setRemoveArm(null)}>
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          className="shrink-0 text-ink-faint hover:text-[color:var(--risk)] transition-colors"
+                          title="Remove this document"
+                          onClick={() => setRemoveArm(a.id)}
+                        >
+                          <Icon.x width={14} height={14} />
+                        </button>
+                      )
+                    )}
+                  </div>
+                ))}
+              </div>
+              {removeAttachment.error && (
+                <div className="text-xs mt-2" style={{ color: "var(--risk)" }}>
+                  {(removeAttachment.error as any).message}
                 </div>
-              </Card>
-            )}
-          </div>
-          <div className="min-w-0 lg:h-full lg:overflow-y-auto"><AiReviewPanel contractId={id!} /></div>
-        </div>
+              )}
+            </Card>
+          )}
         </div>
       )}
 
@@ -1082,6 +1419,24 @@ export default function ContractDetail() {
         </Card>
       )}
         </div>
+        {reviewOpen && (
+          <DockablePanel
+            title="AI review"
+            icon={<Icon.sparkle width={14} height={14} style={{ color: "var(--ai)" }} />}
+            cardAttr="data-airev-card"
+            pos={review.pos}
+            dockW={review.dockW}
+            onGrab={review.startDrag}
+            onDock={review.pos ? review.dock : undefined}
+            onClose={() => toggleReview(false)}
+            onResize={review.startResize}
+            onDockResize={review.startDockResize}
+          >
+            <div className="h-full overflow-y-auto p-3">
+              <AiReviewPanel contractId={id!} bare />
+            </div>
+          </DockablePanel>
+        )}
       </div>
 
       {(checking || qcError || quickCheck) && (
@@ -1154,65 +1509,6 @@ export default function ContractDetail() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * The discussion panel. Rendered inside a sticky full-height left column when docked (default),
- * or as a free-floating fixed box once dragged (`style` supplied + `onDock` shown).
- */
-function DiscussionCard({
-  entityId,
-  count,
-  onClose,
-  onGrab,
-  onDock,
-  docked,
-  style,
-}: {
-  entityId: string;
-  count?: number;
-  onClose: () => void;
-  onGrab: (e: React.MouseEvent) => void;
-  onDock?: () => void;
-  docked?: boolean;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <div
-      data-discussion-card
-      className={
-        "flex flex-col rounded-xl border border-border bg-surface " +
-        (docked ? "h-full shadow-sm" : "max-w-[92vw] shadow-2xl")
-      }
-      style={style}
-    >
-      <div
-        className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border cursor-move select-none rounded-t-xl shrink-0"
-        style={{ background: "var(--surface-2)" }}
-        onMouseDown={onGrab}
-        title="Drag to detach / move"
-      >
-        <span className="text-sm font-medium text-ink-soft uppercase tracking-wide inline-flex items-center gap-1.5 min-w-0">
-          <span aria-hidden className="tracking-[0.15em] text-ink-faint leading-none">⠿</span>
-          <Icon.message width={14} height={14} /> Discussion
-          {count ? <span className="text-ink-faint">({count})</span> : null}
-        </span>
-        <span className="flex items-center gap-1.5 shrink-0">
-          {onDock && (
-            <button className="text-xs link" title="Dock to the left" onClick={onDock}>
-              Dock
-            </button>
-          )}
-          <button className="btn !p-1 !border-0" title="Hide discussion panel" onClick={onClose}>
-            <Icon.x width={14} height={14} />
-          </button>
-        </span>
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
-        <CommentThreads entityType="CONTRACT" entityId={entityId} />
-      </div>
     </div>
   );
 }

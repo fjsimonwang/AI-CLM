@@ -284,6 +284,20 @@ body {
   50% { background: color-mix(in srgb, var(--risk) 8%, transparent); }
 }
 
+/* one-time "Drag here to move" hint on a dockable panel header — timing is entirely CSS */
+.dock-hint-flash { animation: dockHintFlash 0.7s ease-in-out 4; }
+@keyframes dockHintFlash {
+  0%, 100% { background: var(--surface-2); }
+  50% { background: color-mix(in srgb, var(--accent) 28%, var(--surface-2)); }
+}
+.dock-hint-bubble { animation: dockHintBubble 6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes dockHintBubble {
+  0%   { opacity: 0; transform: translateY(-6px) scale(0.94); }
+  4%   { opacity: 1; transform: none; }
+  88%  { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-3px); visibility: hidden; }
+}
+
 .unfold {
   display: grid;
   grid-template-rows: 0fr;

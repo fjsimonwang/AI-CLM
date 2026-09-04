@@ -511,7 +511,8 @@ public class ContractService {
      * Re-apply an intake session's captured fields onto an EXISTING draft contract — used when a
      * requester revises and resubmits a request that an approver returned to them. Keeps the
      * contract number, history and workflow lineage; refreshes the editable fields and bumps a
-     * draft version. The document is re-assembled by the caller afterwards.
+     * draft version. The editable document is deliberately left untouched — the requester's last
+     * edited version is kept; they can rebuild it from the template with "Re-assemble" if they want.
      */
     @Transactional
     public Map<String, Object> updateFromIntake(UUID contractId, CreateRequest req, UUID actor) {

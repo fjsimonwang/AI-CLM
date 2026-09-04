@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, usePerms } from "../api";
-import { Card, SectionTitle, Badge, Spinner, Empty, riskTone } from "./ui";
+import { Card, Badge, Spinner, Empty, riskTone } from "./ui";
 import { Icon } from "./icons";
 import { useHighlight } from "./highlight";
 import { useDocEdited } from "./docEdited";
@@ -10,7 +10,7 @@ const sevTone = (s?: string) => riskTone(s);
 const sevRank = (s?: string) => (s === "CRITICAL" ? 4 : s === "HIGH" ? 3 : s === "MEDIUM" ? 2 : 1);
 const dedupe = (title: string) => (title || "").toLowerCase().replace(/\s+/g, " ").trim();
 
-export function AiReviewPanel({ contractId }: { contractId: string }) {
+export function AiReviewPanel({ contractId, bare = false }: { contractId: string; bare?: boolean }) {
   const can = usePerms();
   const qc = useQueryClient();
   const canPlaybook = can("EDIT_CONTRACT");
@@ -95,29 +95,26 @@ export function AiReviewPanel({ contractId }: { contractId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editedSeq, run?.status, run?.createdAt]);
 
-  return (
-    <Card>
-      <SectionTitle
-        right={
-          <button
-            className="btn btn-ai"
-            style={{ padding: "0.35rem 0.7rem" }}
-            disabled={running || start.isPending || selectedRules.length === 0}
-            onClick={() => start.mutate()}
-          >
-            <Icon.sparkle width={14} height={14} />
-            {running
-              ? "Reviewing in background…"
-              : start.isPending
-                ? "Starting…"
-                : everRan && hasResult
-                  ? "Re-run AI review"
-                  : "Run AI review"}
-          </button>
-        }
-      >
-        AI document review
-      </SectionTitle>
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI document review</h2>
+        <button
+          className="btn btn-ai shrink-0"
+          style={{ padding: "0.35rem 0.7rem" }}
+          disabled={running || start.isPending || selectedRules.length === 0}
+          onClick={() => start.mutate()}
+        >
+          <Icon.sparkle width={14} height={14} />
+          {running
+            ? "Reviewing in background…"
+            : start.isPending
+              ? "Starting…"
+              : everRan && hasResult
+                ? "Re-run AI review"
+                : "Run AI review"}
+        </button>
+      </div>
 
       <p className="text-xs text-ink-faint mb-2">
         A critical review of the current draft against the admin-defined rule checklist and playbooks.
@@ -298,6 +295,8 @@ export function AiReviewPanel({ contractId }: { contractId: string }) {
           {(start.error as any).message}
         </div>
       )}
-    </Card>
+    </>
   );
+
+  return bare ? body : <Card>{body}</Card>;
 }

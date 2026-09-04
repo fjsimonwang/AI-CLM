@@ -47,7 +47,7 @@ export function CommentThreads({ entityType, entityId }: {
   const [agentKey, setAgentKey] = useState(0);
   const [foldOpen, setFoldOpen] = useState<Record<string, boolean>>({});
 
-  // "✦ Ask agent" is available when the current user has Agent talk on (header toggle);
+  // "✦ Ask agent" is available when the current user has Agent Crew on (header toggle);
   // /agent-channel/status.active reflects that personal opt-in. `busyThreads` lists threads
   // whose agent turn is generating right now (drives "An agent is replying" before it lands).
   const statusQuery = useQuery({
@@ -81,7 +81,7 @@ export function CommentThreads({ entityType, entityId }: {
       setShowNew(false);
       setComposerKey((k) => k + 1);
       invalidate();
-      // with Agent talk on, participants' agents answer the new thread on their own —
+      // with Agent Crew on, participants' agents answer the new thread on their own —
       // poll until roughly the longest an agent exchange can take to land
       if (agentAsk) {
         setAgentThread(data?.id ?? null);

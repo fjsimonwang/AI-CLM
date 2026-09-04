@@ -287,8 +287,30 @@ public class IntakeService {
         return m;
     }
 
+    /**
+     * Mirror the intake session's supporting attachments onto the contract. Idempotent and called
+     * on every submit (first submit AND every revise-and-resubmit) so files the requester adds
+     * while a returned request is reopened for revision actually reach the contract — the
+     * auto-rejection rules and the contract's "Supporting documents" list read the CONTRACT's
+     * attachments, not the session's.
+     */
     private void carryAttachmentsToContract(IntakeSession s, UUID contractId, UUID userId) {
-        for (IntakeAttachment a : intakeAttachments.findByIntakeSessionIdOrderByCreatedAtAsc(s.id)) {
+        List<IntakeAttachment> sessionFiles = intakeAttachments.findByIntakeSessionIdOrderByCreatedAtAsc(s.id);
+        List<ContractAttachment> existing = contractAttachments.findByContractIdOrderByCreatedAtAsc(contractId);
+        java.util.function.BiFunction<String, Long, String> key = (name, size) -> (name == null ? "" : name) + " " + size;
+        Set<String> want = sessionFiles.stream().map(a -> key.apply(a.filename, a.sizeBytes)).collect(java.util.stream.Collectors.toSet());
+        Set<String> have = new java.util.HashSet<>();
+
+        // remove contract attachments the session no longer has (all contract attachments originate here)
+        for (ContractAttachment ca : existing) {
+            String k = key.apply(ca.filename, ca.sizeBytes);
+            if (want.contains(k) && have.add(k)) continue; // keep the first of any duplicate
+            contractAttachments.delete(ca);
+        }
+        // add session attachments the contract is missing
+        for (IntakeAttachment a : sessionFiles) {
+            String k = key.apply(a.filename, a.sizeBytes);
+            if (!have.add(k)) continue; // already present (or a duplicate name+size)
             ContractAttachment ca = new ContractAttachment();
             ca.contractId = contractId;
             ca.filename = a.filename;
@@ -361,8 +383,8 @@ public class IntakeService {
         if (!userId.equals(c.ownerUserId) && !userId.equals(c.createdBy)) {
             throw new ApiExceptions.ForbiddenException("Only the requester can revise this request.");
         }
-        if (!"DRAFT".equals(c.status) || c.rejectionReason == null) {
-            throw new ApiExceptions.BadRequestException("Only a rejected request can be revised.");
+        if (!"DRAFT".equals(c.status)) {
+            throw new ApiExceptions.BadRequestException("Only a draft request can be edited — recall it from review first.");
         }
         if (c.intakeSessionId == null) {
             throw new ApiExceptions.BadRequestException("This contract was not created through intake.");
@@ -494,12 +516,35 @@ public class IntakeService {
      */
     public Map<String, Object> submit(UUID sessionId, UUID userId, UUID precedentContractId,
                                       Map<String, Object> fieldOverrides) {
+        // A session that already produced a contract is a REVISION (the requester revising a
+        // returned/rejected request). In that case the document must be left exactly as it was
+        // last edited — we do NOT re-assemble it from the template here. The requester can still
+        // trigger a fresh assembly explicitly with the "Re-assemble" button on the contract.
+        boolean revising = sessions.findById(sessionId)
+                .map(x -> x.resultingContractId != null).orElse(false);
+
         UUID contractId = self.createContract(sessionId, userId, precedentContractId, fieldOverrides);
         IntakeSession sess = sessions.findById(sessionId).orElseThrow();
         sess.saved = true; // moving to the draft preview counts as an explicit save
         if (sess.requestNumber == null) sess.requestNumber = nextRequestNumber();
         sessions.save(sess);
         boolean paper = sess.paperBodyHtml != null && !sess.paperBodyHtml.isBlank();
+
+        if (revising) {
+            Contract c = contracts.findById(contractId).orElseThrow();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("contractId", contractId);
+            out.put("contractNumber", c.contractNumber);
+            out.put("status", c.status);
+            out.put("draftDeviations", List.of());
+            out.put("clausesFromPrecedent", List.of());
+            out.put("documentKept", true); // signals the UI that the last document version was retained
+            if ("MIGRATED".equals(c.source)) {
+                out.put("paperMode", true);
+                out.put("paperFilename", sess.paperFilename);
+            }
+            return out;
+        }
 
         List<Map<String, Object>> deviations = List.of();
         List<String> fromPrecedent = List.of();
@@ -541,7 +586,14 @@ public class IntakeService {
                                Map<String, Object> fieldOverrides) {
         IntakeSession s = sessions.findById(sessionId)
                 .orElseThrow(() -> new ApiExceptions.NotFoundException("Intake session not found"));
-        if ("SUBMITTED".equals(s.status) && s.resultingContractId != null) return s.resultingContractId;
+        // Already produced a contract that has moved past DRAFT (in review / executed / …): nothing
+        // more to do here — return it. While it is still a DRAFT the requester may have gone back to
+        // the conversation to change things, so fall through and patch that same draft below.
+        if ("SUBMITTED".equals(s.status) && s.resultingContractId != null) {
+            boolean stillDraft = contracts.findById(s.resultingContractId)
+                    .map(c -> "DRAFT".equals(c.status)).orElse(false);
+            if (!stillDraft) return s.resultingContractId;
+        }
 
         Map<String, Object> captured = Json.readMap(s.capturedFields);
         Map<String, String> provenance = strMap(Json.readMap(s.fieldProvenance));
@@ -610,7 +662,7 @@ public class IntakeService {
                 : contractService.create(req, userId);
         UUID contractId = UUID.fromString(String.valueOf(contract.get("id")));
 
-        if (!revising) carryAttachmentsToContract(s, contractId, userId); // already carried on first submit
+        carryAttachmentsToContract(s, contractId, userId); // mirror session files onto the contract (idempotent)
 
         if (!revising && s.paperBodyHtml != null && !s.paperBodyHtml.isBlank()) {
             // document is the verbatim third-party paper — mark migrated so it stays read-only

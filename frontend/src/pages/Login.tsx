@@ -10,12 +10,23 @@ function newSum() {
   return { a, b };
 }
 
+// demo-account group order + display labels — admin last
+const ROLE_RANK: Record<string, number> = {
+  REQUESTER: 0, APPROVER: 1, LEGAL: 2, GENERAL_COUNSEL: 3, FINANCE: 4, ADMIN: 99,
+};
+const ROLE_LABEL: Record<string, string> = {
+  REQUESTER: "Requestor", APPROVER: "Approver", LEGAL: "Legal",
+  GENERAL_COUNSEL: "General counsel", FINANCE: "Finance", ADMIN: "Admin",
+};
+const roleRank = (r: string) => (r in ROLE_RANK ? ROLE_RANK[r] : 50);
+const roleLabel = (r: string) => ROLE_LABEL[r] || r.charAt(0) + r.slice(1).toLowerCase().replace(/_/g, " ");
+
 export default function Login() {
   const nav = useNavigate();
   const setAuth = useAuth((s) => s.setAuth);
   const token = useAuth((s) => s.token);
-  const [email, setEmail] = useState("gc@acme.example");
-  const [password, setPassword] = useState("demo1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [demo, setDemo] = useState<DemoUser[]>([]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,7 +61,16 @@ export default function Login() {
     doLogin(email, password);
   };
 
+  // the human check only needs to pass once per browser session
+  const checkDone = () => {
+    try { return sessionStorage.getItem("clm.humanCheckPassed") === "1"; } catch { return false; }
+  };
+
   const openCheck = (user: DemoUser) => {
+    if (checkDone()) {
+      doLogin(user.email, user.password);
+      return;
+    }
     setAnswer("");
     setCheckErr("");
     setCheck({ user, ...newSum() });
@@ -60,6 +80,7 @@ export default function Login() {
     e.preventDefault();
     if (!check) return;
     if (parseInt(answer.trim(), 10) === check.a + check.b) {
+      try { sessionStorage.setItem("clm.humanCheckPassed", "1"); } catch { /* ignore */ }
       doLogin(check.user.email, check.user.password);
     } else {
       setCheckErr("Not quite — try again.");
@@ -74,7 +95,7 @@ export default function Login() {
       const r = u.roles.split(",")[0];
       (byRole[r] ||= []).push(u);
     }
-    return byRole;
+    return Object.entries(byRole).sort((a, b) => roleRank(a[0]) - roleRank(b[0]));
   }, [demo]);
 
   return (
@@ -107,12 +128,12 @@ export default function Login() {
         {demo.length > 0 && (
           <div className="card p-4 mt-4">
             <div className="text-xs text-ink-faint mb-2">
-              Demo accounts — one click to sign in (a quick human check follows)
+              Demo accounts — one click to sign in (a quick human check once per session)
             </div>
             <div className="space-y-2.5 max-h-[46vh] overflow-y-auto pr-1">
-              {Object.entries(grouped).map(([role, us]) => (
+              {grouped.map(([role, us]) => (
                 <div key={role}>
-                  <div className="text-[10px] uppercase tracking-wide text-ink-faint mb-1">{role}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-ink-faint mb-1">{roleLabel(role)}</div>
                   <div className="space-y-1">
                     {us.map((u) => (
                       <button

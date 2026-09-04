@@ -1,8 +1,38 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Spinner } from "./ui";
 import { Icon } from "./icons";
+
+// entity-TYPE-YYYY-NNNN, e.g. BDK_COMPANY-NDA-2026-0020, ACME_INC-VENDOR_PURCHASE-2026-0005
+const CONTRACT_NO_RX = /\b[A-Z0-9_]+-[A-Z0-9_]+-\d{4}-\d{4}\b/g;
+
+/** Turn any contract numbers in a string into links to that contract's page. */
+function linkifyContracts(text: string | undefined, numToId: Map<string, string>) {
+  if (!text) return text ?? null;
+  const out: ReactNode[] = [];
+  let last = 0;
+  CONTRACT_NO_RX.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = CONTRACT_NO_RX.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const id = numToId.get(m[0]);
+    out.push(
+      id ? (
+        <Link key={`${m.index}-${m[0]}`} to={`/contracts/${id}`} className="link">
+          {m[0]}
+        </Link>
+      ) : (
+        m[0]
+      ),
+    );
+    last = m.index + m[0].length;
+  }
+  if (out.length === 0) return text;
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
 
 /**
  * The dashboard AI insight. Folded by default. The default view is a fast triage built only from
@@ -28,6 +58,17 @@ export function AiInsight() {
   });
   const deepFailed = deepQ.data?.failed === true;
 
+  // contract-number -> id, so insight text can link straight to the contract page
+  const contractsQ = useQuery({ queryKey: ["contracts", "insight-linkify"], queryFn: () => api("/contracts") });
+  const numToId = useMemo(() => {
+    const m = new Map<string, string>();
+    ((contractsQ.data as any[]) || []).forEach((c) => {
+      if (c?.contractNumber && c?.id) m.set(c.contractNumber, c.id);
+    });
+    return m;
+  }, [contractsQ.data]);
+  const lk = (t?: string) => linkifyContracts(t, numToId);
+
   const data: any = q.data || {};
   const aiDisabled = data.aiDisabled === true;
   const sig = data.signals || null;
@@ -49,7 +90,7 @@ export function AiInsight() {
     return (
       <div className="card px-4 py-3 flex items-center gap-2.5 text-sm text-ink-faint" style={{ borderColor: "var(--border)" }}>
         <Icon.sparkle width={15} height={15} className="shrink-0" />
-        AI insight is off. Turn on <span className="font-medium text-ink-soft">Agent&nbsp;talk</span> in the header to re-enable AI features.
+        AI insight is off. Turn on <span className="font-medium text-ink-soft">Agent&nbsp;Crew</span> in the header to re-enable the advanced agent functions.
       </div>
     );
   }
@@ -87,21 +128,21 @@ export function AiInsight() {
             </div>
           ) : (
             <div className="space-y-4">
-              {quick.summary && <p className="text-sm text-ink-soft leading-relaxed">{quick.summary}</p>}
+              {quick.summary && <p className="text-sm text-ink-soft leading-relaxed">{lk(quick.summary)}</p>}
 
               {(quick.items || []).length > 0 && (
                 <div className="space-y-2">
                   {quick.items.map((it: any, i: number) => (
                     <div key={i} className="rounded-[8px] border border-border p-2.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{it.title}</span>
+                        <span className="text-sm font-medium">{lk(it.title)}</span>
                         {it.severity && (
                           <Badge tone={it.severity === "HIGH" ? "warn" : it.severity === "LOW" ? "ok" : "neutral"}>
                             {it.severity}
                           </Badge>
                         )}
                       </div>
-                      {it.detail && <div className="text-xs text-ink-soft mt-1">{it.detail}</div>}
+                      {it.detail && <div className="text-xs text-ink-soft mt-1">{lk(it.detail)}</div>}
                     </div>
                   ))}
                 </div>
@@ -131,18 +172,18 @@ export function AiInsight() {
                             {s.items.map((it: any, i: number) => (
                               <div key={i} className="rounded-[8px] border border-border p-2.5">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-medium">{it.title}</span>
+                                  <span className="text-sm font-medium">{lk(it.title)}</span>
                                   {s.sev && (
                                     <Badge tone={it.severity === "HIGH" ? "warn" : it.severity === "LOW" ? "ok" : "neutral"}>
                                       {it.severity}
                                     </Badge>
                                   )}
                                 </div>
-                                {it.detail && <div className="text-xs text-ink-soft mt-1">{it.detail}</div>}
+                                {it.detail && <div className="text-xs text-ink-soft mt-1">{lk(it.detail)}</div>}
                                 {s.steps && Array.isArray(it.steps) && it.steps.length > 0 && (
                                   <ol className="text-xs text-ink-soft mt-1.5 list-decimal pl-4 space-y-0.5">
                                     {it.steps.map((step: string, j: number) => (
-                                      <li key={j}>{step}</li>
+                                      <li key={j}>{lk(step)}</li>
                                     ))}
                                   </ol>
                                 )}

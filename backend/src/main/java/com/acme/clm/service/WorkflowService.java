@@ -272,6 +272,20 @@ public class WorkflowService {
         return fired;
     }
 
+    /** Human-readable name for a workflow assignment role expression (the team/role a task sits with). */
+    static String roleLabel(String role) {
+        return switch (role == null ? "" : role) {
+            case "owner" -> "Contract owner";
+            case "signatory" -> "Authorised signatory";
+            case "owner_manager" -> "Owner's manager";
+            case "legal_team" -> "Legal team";
+            case "legal_manager" -> "Legal manager";
+            case "finance_approver" -> "Finance approver";
+            case "" -> "Assignee";
+            default -> Character.toUpperCase(role.charAt(0)) + role.substring(1).replace('_', ' ');
+        };
+    }
+
     private UUID resolveRole(String role, Contract c) {
         return switch (role) {
             case "owner", "signatory" -> c.ownerUserId != null ? c.ownerUserId : anyGc();
@@ -358,9 +372,14 @@ public class WorkflowService {
             JsonNode d = Json.read(wfDef.definition);
             List<Map<String, Object>> states = new ArrayList<>();
             for (JsonNode s : d.path("states")) {
-                states.add(Map.of("key", s.path("key").asText(), "type", s.path("type").asText("task")));
+                Map<String, Object> st = new LinkedHashMap<>();
+                st.put("key", s.path("key").asText());
+                st.put("type", s.path("type").asText("task"));
+                if (s.hasNonNull("taskType")) st.put("taskType", s.path("taskType").asText());
+                states.add(st);
             }
             m.put("states", states);
+            m.put("workflowName", d.path("name").asText(wfDef.name));
         }
         return m;
     }
@@ -415,6 +434,7 @@ public class WorkflowService {
         m.put("type", t.taskType);
         m.put("status", t.status);
         m.put("role", t.assignedRoleExpression);
+        m.put("roleLabel", roleLabel(t.assignedRoleExpression));
         m.put("assignedUserId", t.assignedUserId);
         m.put("assignee", t.assignedUserId == null ? null
                 : users.findById(t.assignedUserId).map(u -> u.displayName).orElse(null));

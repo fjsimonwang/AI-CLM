@@ -64,17 +64,28 @@ public final class PageDocs {
             a "Hidden sections" card can re-show them; edits auto-save (PUT /me/dashboard-config).
             AI: the "AI insight" section (collapsible, subtle styling — no flashing) shows a fast
             triage built ONLY from your open tasks and attention items: a short summary plus a few
-            ranked items. A "Deeper analysis" button runs the heavier review of your audit trail,
-            AI activity, risks and obligations ("What matters now", "Suspicious & worth checking",
-            "Suggested next actions") on demand.
+            ranked items. Any contract number mentioned in the insight text is a link straight to
+            that contract's page. A "Deeper analysis" button runs the heavier review of your audit
+            trail, AI activity, risks and obligations ("What matters now", "Suspicious & worth
+            checking", "Suggested next actions") on demand.
             No permission gates; data is access-filtered server-side.
             """);
         add("/intake", """
-            NEW REQUEST / INTAKE (/intake) — conversational contract intake. Two-column split pane.
+            NEW REQUEST / INTAKE (/intake) — conversational contract intake. The "AI assistant" chat
+            is a movable / dockable / resizable panel (⠿ drag its header to detach it to a
+            free-floating box; then drag any edge or the top-right / bottom-right corner to resize;
+            "Dock" snaps it back to a column beside the form, whose width you set by dragging the
+            column's right edge; "×" hides it). Hidden, an "AI assistant" button above the form
+            brings it back. The Request details form fills the rest of the width. (All the movable
+            panels flash their header with a "Drag here to move" bubble once, on the first one you
+            see in a browser session.)
             Arriving here via "Revise & resubmit" on a rejected request loads that request's saved
             session instead of a fresh one, with a red "Revising a returned request" banner showing
-            why it was sent back; edits + regenerate + resubmit update the same contract.
-            LEFT: chat "New request — describe what you need in plain language". AI replies stream
+            why it was sent back; edits + regenerate + resubmit update the same contract. On a
+            revision the document is NOT re-assembled from the template — the last edited version is
+            kept as-is; the review page says so, and the requester can rebuild it from the template
+            with "Re-assemble" on the contract's Document tab if they want to.
+            CHAT PANEL: "New request — describe what you need in plain language". AI replies stream
             token by token. Under the latest AI question there are quick-answer chips ("Send N answers"
             composes them). Header buttons: "Save draft"/"Saved", "Drafts (N)" (opens a drafts drawer —
             click to resume, 'X' deletes after confirm), "New chat". On a fresh chat there are shortcut
@@ -83,19 +94,25 @@ public final class PageDocs {
             (AI reads the document and fills the fields; that document becomes read-only after submit).
             A separate paper mode replaces the chat with a drag-and-drop upload zone ("Drop the contract
             file here", .docx/.html/.txt, max 10 MB) and "Back to chat".
-            RIGHT: "Request details" card — all intake fields grouped under colored headers (BASICS,
+            REQUEST DETAILS: card — all intake fields grouped under colored headers (BASICS,
             SCOPE, TERM & RENEWAL, DATA & PRIVACY, GOVERNANCE, EXPECTED ROUTING), each editable,
             required fields marked *; AI-populated fields show provenance chips and "% confidence";
             low-trust values are highlighted with "looks right — confirm". Fields save on blur; a
             "Save N edit(s)" button flushes pending edits. Also: "Third-party paper" card (with
             sandboxed "Preview"), green "All required info is captured" notice when ready, "Expected
             routing" card (predicted triage path + score + explanation), "Precedents" card (AI-scored,
-            toggle to select one), "Supporting documents" card. Bottom: a status chip ("Still need: …"
+            toggle to select one), "Supporting documents" card ("Add supporting documents" — attach
+            NDAs, due-diligence forms etc.; these are copied onto the contract on every submit,
+            including a revise-and-resubmit, and are what the auto-rejection attachment checks read).
+            Bottom: a status chip ("Still need: …"
             or "Confirm the highlighted values first") and the "Generate Document Draft" button —
             enabled only when nothing required is missing and AI guesses are confirmed.
             After generating: "Draft ready for your review" card listing carried clause chips and AI
             deviation callouts, with "Submit for approval" (confirm modal → starts the workflow),
-            "Save draft", "Cancel"; below it a full document editor + "AI document review" panel.
+            "Save draft", "Cancel", and a "Back to conversation" button — you can return to the chat
+            to change anything and re-submit; that updates the SAME draft (no duplicate). Below the
+            card: a full document editor on the left and the "AI document review" panel on the right
+            (check points, optional playbooks, "Run AI review", findings with jump-to-quote).
             """);
         add("/intake-sessions/:id", """
             INTAKE HISTORY (/intake-sessions/{id}) — read-only archive of a completed conversational
@@ -111,38 +128,66 @@ public final class PageDocs {
             badge (DRAFT / IN_REVIEW / EXECUTED / CLOSED_REJECTED / CANCELLED), risk badge,
             "migrated" badge, parent-contract link.
             Requestor actions: on a plain DRAFT — "Submit for approval" and "Cancel request"
-            (→ CANCELLED); on a DRAFT that an approver rejected (shows a red "This request was
-            rejected" banner with the reason) — "Revise & resubmit" and "Close request"
-            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall to draft". "Revise & resubmit" reopens the
-            request's intake session and takes you to the New request page with the conversation
-            and form loaded, so you can edit the details and resubmit — it updates the SAME
-            contract (keeps its number, bumps a draft version), it does not create a new one.
-            "Cancel request", "Close request" and "Recall to draft" each ask for confirmation.
+            (→ CANCELLED); on a DRAFT that an approver rejected (shows a red rejection banner with
+            the reason — "returned to you" for the requestor, "returned to the requestor" for
+            anyone else viewing it) — "Revise & resubmit" and "Close request"
+            (→ CLOSED_REJECTED); on IN_REVIEW — "Recall & edit". Both "Revise & resubmit" and
+            "Recall & edit" reopen the request's intake session and take you to the New request page
+            with the conversation and form loaded, so you can edit the details (and add/remove
+            supporting documents) and resubmit — it updates the SAME contract (keeps its number,
+            bumps a draft version), it does not create a new one. "Recall & edit" first pulls the
+            contract out of review and cancels the open approval task.
+            "Cancel request", "Close request" and "Recall & edit" each ask for confirmation.
             Cancelled and closed contracts are terminal — they can't be resubmitted and stop
             appearing in dashboard open items.
+            When the workflow reaches the signature step (assigned to the requestor), the header
+            shows "Send for Signature" — it confirms, then sends the document for e-signature and
+            moves the contract to EXECUTED.
             When the current workflow task is
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
-            An "AI summary & briefing" card sits under the header (collapsible; can regenerate the
+            FLOW PROGRESS BAR: directly under the header, above the "AI summary & briefing" card, a
+            horizontal step bar shows where the contract is. It always starts from the requestor's
+            "Submitted" step. When an approval workflow is running it then shows that workflow's own
+            steps (e.g. Submitted → Manager approval → Signature → Executed, or the Legal review
+            chain) with the current step marked "In progress" and, under it, "Pending: <who>" — the
+            individual it is assigned to, or the team/role name (e.g. "Legal team") when it is not
+            yet with a named person. Finished steps are ticked, and the live contract status badge
+            is shown. With no workflow yet it shows the generic lifecycle
+            (Draft → Submitted → In review → Executed); a returned/rejected, cancelled or closed
+            request is called out on the bar too.
+            An "AI summary & briefing" card sits under it (collapsible; can regenerate the
             approver briefing).
-            DISCUSSION PANEL: comment threads live in a DRAGGABLE panel (not a tab). By default it
-            is docked as a full-height left column right beside the tab content (sticky, so it
-            stays in view as you scroll). Drag its header to detach it into a free-floating box
-            anywhere on screen; a "Dock" button then snaps it back. Open/closed and any custom
-            position are remembered. "New thread" (just a message, no title), reply, resolve, and a
-            "✦ Ask agent" action per thread when you have Agent talk on (see CROSS-CUTTING FEATURES
+            DISCUSSION PANEL: comment threads live in a movable / dockable / resizable panel (not a
+            tab). By default it is docked as a full-height left column beside the tab content
+            (sticky); drag the docked column's right edge to change its width. Drag the ⠿ header to
+            detach it to a free-floating box; then drag any edge, the bottom-right corner, or the
+            top-right corner (top-right keeps the bottom edge pinned) to resize it, and "Dock" snaps
+            it back. Open/closed state and any custom position/size are remembered.
+            "New thread" (just a message, no title), reply, resolve, and a
+            "✦ Ask agent" action per thread when you have Agent Crew on (see CROSS-CUTTING FEATURES
             below). An "×" hides the panel (a "Show discussion" button brings it back); a link with
             ?tab=discussion opens it. While participants' agents are working, an animated status
             shows INSIDE the affected thread — "Checking with all agents", changing to "An agent is
             replying" once an agent message actually lands.
+            AI REVIEW PANEL: the "AI document review" panel works exactly the same way — a movable /
+            dockable / resizable panel, docked as a full-height column on the RIGHT of the tab
+            content by default (resize its width from the column's edge; float it and resize from
+            any edge or the top-right / bottom-right corner). It is hidden by default; an "AI
+            review" button sits next to "Show discussion" to open it. Open/closed state and any
+            floating position/size are remembered. (Its contents — check points, playbooks,
+            findings — are described under "AI review & submit gate" below.)
             TABS: "Overview" (key-value terms: contracting
             entity, counterparties, governing law, value, dates, owner, liability; grouped "Deal
             terms"; "Clauses used" with tier badges; "People with access" — add/remove participants
             via "add person"; "Hierarchy" child links);
             "Key terms" (table of extracted terms with source quote + provenance inherited/overrides +
             confidence); "Document" (document editor with Read/Edit toggle when EDIT_CONTRACT, autosave,
-            "Re-assemble", "Open full", supporting documents with "Download", plus the "AI document
-            review" panel — see below);
+            "Re-assemble" — rebuilds the document from the current template + clauses, discarding manual
+            edits; this is the ONLY thing that regenerates the document, resubmitting a revised request
+            never does — "Open full", supporting documents with "Download" (and, while the contract
+            is still a DRAFT, an "×" to remove one — the requestor only). The AI review panel is
+            not part of this tab — it is the separate dockable "AI review" panel, see above);
             "Workflow" (workflow name, current state badge, "Start workflow", task list showing each
             task's outcome, completion date and the approve/reject note — a rejection reason is
             highlighted); "Obligations" (table with Verify/Close and confidence);
@@ -151,21 +196,27 @@ public final class PageDocs {
             precedent basis); "Risks" (risk register: "Add risk", severity badges, "Dismiss"/"Resolve"/
             "Reopen", quoted locations); "Audit trail" (who did what, with AI actors marked).
             AI review & submit gate: "Submit for approval" first runs/syncs an "AI quick check" (modal
-            listing findings by severity; still allows "Submit anyway"). In the Document tab the review
-            panel lets you pick checked rules and optional playbooks, re-runs, links findings' quotes
-            into the document, and offers Dismiss/Resolve.
+            listing findings by severity; still allows "Submit anyway"). The "AI review" panel (opened
+            from the button next to "Show discussion" — see AI REVIEW PANEL above) lets you pick
+            checked rules and optional playbooks, re-run the review, click a finding's quote to jump
+            to it in the document, and Dismiss/Resolve findings; every finding is also written to the
+            Risks tab.
             """);
         add("/contracts", """
-            CONTRACTS LIST (/contracts) — the contract register with an AI inquiry pane.
+            CONTRACTS LIST (/contracts) — the contract register with an AI inquiry panel.
             Header: title "Contracts" and a "New request" button (goes to /intake).
-            Split pane: LEFT "AI inquiry — ask about your portfolio": an "Ask" input + "Ask" button
-            (POST /inquiry/ask) and suggestion chips; results show "Interpreted as" (the AI's
-            restatement with filter badges), a refusal as a warning card; "edit & re-run" exposes an
-            editable interpretation + raw filter fields and "Re-run"; "Add as dashboard section" saves
-            a bar/pie chart (choose "Group by" dimension) to the Dashboard; "New chat" resets. When an
-            inquiry is active the list pane widens and an accent banner shows "Filtered by your AI
-            inquiry" with "Show all" to clear.
-            RIGHT: filter card ("All types", status, region, "Counterparty…" text, "Expiring ≤ 30/90/180
+            AI INQUIRY PANEL ("Ask about your portfolio"): a movable / dockable / resizable panel
+            (⠿ drag its header to detach it to a free-floating box; then drag any edge or the
+            top-right / bottom-right corner to resize; "Dock" snaps it back to a column beside the
+            table, whose width you set by dragging the column's right edge; "×" hides it; an
+            "AI inquiry" button above the table brings it back). Inside: an "Ask" input + "Ask" button (POST /inquiry/ask) and
+            suggestion chips; results show "Interpreted as" (the AI's restatement with filter
+            badges), a refusal as a warning card; "edit & re-run" exposes an editable interpretation
+            + raw filter fields and "Re-run"; "Add as dashboard section" saves a bar/pie chart
+            (choose "Group by" dimension) to the Dashboard; "New chat" resets. When an inquiry is
+            active an accent banner over the table shows "Filtered by your AI inquiry" with "Show
+            all" to clear.
+            TABLE SIDE: filter card ("All types", status, region, "Counterparty…" text, "Expiring ≤ 30/90/180
             days") above the contract table. The table has add/remove columns ("Columns (N)" button),
             per-column sort (arrows in each header) and per-column filter menus (is / contains / before /
             after / larger / smaller / is empty). Columns include Contract number + title, Type,
@@ -281,9 +332,11 @@ public final class PageDocs {
             take it out of the assistant's knowledge without deleting it.
             """);
         add("/login", """
-            LOGIN (/login) — email/password sign-in. The demo environment also lists demo accounts
-            grouped by role; clicking one signs in as that user after a quick arithmetic
-            "not a robot" check. Not part of the signed-in experience.
+            LOGIN (/login) — email/password sign-in (the fields start empty). The demo environment
+            also lists demo accounts grouped by role, in the order Requestor → Approver → Legal →
+            General counsel → Finance → Admin; clicking a name signs in as that user after a quick
+            arithmetic "not a robot" check — which is only asked once per browser session. Not part
+            of the signed-in experience.
             """);
     }
 
@@ -315,20 +368,22 @@ public final class PageDocs {
             legal entity) and — for confidential ones — broad access. If no policy covers a
             question the assistant says so rather than guessing.
 
-            AGENT COLLABORATION / "AGENT TALK" — each participant on a contract can have a personal
+            AGENT COLLABORATION / "AGENT CREW" — each participant on a contract can have a personal
             AI agent that takes part in that contract's Discussion threads, speaking AS that person
             (first person), grounded in the contract record.
-            - The "Agent talk" toggle in the top header is the MASTER AI SWITCH for the user: it
-              controls agent discussion AND the dashboard AI insight AND the AI approver briefings.
-              Toggling it opens a confirmation dialog listing all three. While off, none of those
-              run for the user and the dashboard/contract show an "AI off" hint instead. There is
-              no per-contract switch (PATCH /me/agent-setting).
+            - The "Agent Crew" toggle in the top header (previously labelled "Agent talk") is the
+              MASTER SWITCH for the user's advanced agent functionality: it controls agent
+              discussion AND the dashboard AI insight AND the AI approver briefings. Toggling it
+              opens a confirmation dialog that names it as the advanced agent functions and lists
+              all three. While off, none of those run for the user and the dashboard/contract show
+              an "AI off — enable Agent Crew" hint instead. There is no per-contract switch
+              (PATCH /me/agent-setting).
             - Using it: open a Discussion thread on a contract and click "✦ Ask agent". Pick "Auto —
               best placed to answer" (the system routes the question to the participant whose role
               best fits — financial / legal / approval / general) or target a specific person's
               agent from the dropdown. While this runs the thread shows "Checking with all agents",
               switching to "An agent is replying" once an agent message lands; the reply is tagged
-              "<Name> (agent)" with violet styling. Posting a new thread with Agent talk on triggers
+              "<Name> (agent)" with violet styling. Posting a new thread with Agent Crew on triggers
               the same auto-answer without the "✦ Ask agent" click.
             - Runs in the background: the agents work server-side, so the replies still land in the
               thread even if you navigate away — reopen the contract and they will be there.

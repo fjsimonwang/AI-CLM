@@ -106,11 +106,10 @@ export function InquiryPanel({ onFilters }: { onFilters: (filters: Record<string
   }
 
   return (
-    <Card className="flex flex-col !p-0 max-lg:h-[70vh] lg:h-[calc(100vh-160px)]">
-      <div className="px-3 py-3 border-b border-border flex items-center justify-between gap-2">
+    <div className="flex flex-col h-full min-h-0 bg-surface">
+      <div className="px-3 py-2.5 border-b border-border flex items-center justify-between gap-2 shrink-0">
         <span className="text-sm font-medium truncate">
-          AI inquiry
-          <span className="text-ink-faint font-normal"> — ask about your portfolio</span>
+          Ask about your portfolio
         </span>
         {(answer || question) && !busy && (
           <button
@@ -130,7 +129,7 @@ export function InquiryPanel({ onFilters }: { onFilters: (filters: Record<string
           </button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
         <div className="flex gap-2">
           <input
             className="input"
@@ -313,6 +312,6 @@ export function InquiryPanel({ onFilters }: { onFilters: (filters: Record<string
           </>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
