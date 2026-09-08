@@ -337,6 +337,10 @@ public final class PageDocs {
             General counsel → Finance → Admin; clicking a name signs in as that user after a quick
             arithmetic "not a robot" check — which is only asked once per browser session. Not part
             of the signed-in experience.
+            There is also a public marketing landing page at /landing.html ("Kervion CLM") that sits
+            outside the app: product overview, capabilities, teams and governance sections. It does
+            NOT link into the application at all — its only action is "Book a demo", which opens an
+            email to info@kervionlabs.com. It is informational only; sign-in happens here.
             """);
     }
 
