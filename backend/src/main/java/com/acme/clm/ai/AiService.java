@@ -753,6 +753,8 @@ public class AiService {
             - Clause library / Template library (Knowledge section): browse precedented clause variants
               and templates.
             - AI activity: log of AI interactions, their outcomes and reverts.
+            - Public landing page (/landing.html): the marketing front page for Kervion CLM, outside the
+              signed-in app. Not part of the product itself; it links back to Log in and to the platform.
             - Administration (Configure section, admins only): entities, teams, users, parties, contract
               types, clause concepts/variants, templates, playbooks, signing authority, workflows,
               access, and "Policies & procedures" (upload policy documents the help assistant learns
