@@ -1,8 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, useAuth } from "../api";
 
 type DemoUser = { email: string; password: string; displayName: string; roles: string };
+
+/** transitions.dev "error state shake" — replays the shake by removing the
+ * class, forcing a reflow, then re-adding it (per the skill's own recipe). */
+function useShake(trigger: number) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!trigger) return;
+    const el = ref.current;
+    if (!el) return;
+    el.classList.remove("is-shaking");
+    void el.offsetWidth; // force reflow so the animation replays
+    el.classList.add("is-shaking");
+    const cs = getComputedStyle(document.documentElement);
+    const ms = (name: string, fb: number) => {
+      const v = parseFloat(cs.getPropertyValue(name));
+      return Number.isFinite(v) ? v : fb;
+    };
+    const shakeMs = ms("--shake-dur-a", 80) * 2 + ms("--shake-dur-b", 60) * 2;
+    const t = setTimeout(() => el.classList.remove("is-shaking"), shakeMs + 20);
+    return () => clearTimeout(t);
+  }, [trigger]);
+  return ref;
+}
 
 function newSum() {
   const a = 2 + Math.floor(Math.random() * 8);
@@ -29,12 +52,16 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [demo, setDemo] = useState<DemoUser[]>([]);
   const [err, setErr] = useState("");
+  const [errAttempt, setErrAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
+  const passwordShakeRef = useShake(errAttempt);
 
   // one-click demo login gated by a lightweight "not a robot" arithmetic check
   const [check, setCheck] = useState<{ user: DemoUser; a: number; b: number } | null>(null);
   const [answer, setAnswer] = useState("");
   const [checkErr, setCheckErr] = useState("");
+  const [checkErrAttempt, setCheckErrAttempt] = useState(0);
+  const answerShakeRef = useShake(checkErrAttempt);
 
   useEffect(() => {
     if (token) nav("/");
@@ -50,6 +77,7 @@ export default function Login() {
       nav("/");
     } catch (e: any) {
       setErr(e.message || "Login failed");
+      setErrAttempt((n) => n + 1);
       setCheck(null);
     } finally {
       setBusy(false);
@@ -84,6 +112,7 @@ export default function Login() {
       doLogin(check.user.email, check.user.password);
     } else {
       setCheckErr("Not quite — try again.");
+      setCheckErrAttempt((n) => n + 1);
       setAnswer("");
       setCheck({ user: check.user, ...newSum() });
     }
@@ -110,16 +139,20 @@ export default function Login() {
             <label className="text-xs text-ink-faint">Email</label>
             <input className="input mt-1" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
-          <div>
+          <div className={`t-input-wrap ${err ? "is-error" : ""}`}>
             <label className="text-xs text-ink-faint">Password</label>
             <input
-              className="input mt-1"
+              ref={passwordShakeRef}
+              className={`input t-input mt-1 ${err ? "is-error" : ""}`}
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (err) setErr("");
+              }}
             />
+            <div className="t-error-msg text-xs mt-1" style={{ color: "var(--risk)" }}>{err}</div>
           </div>
-          {err && <div className="text-xs" style={{ color: "var(--risk)" }}>{err}</div>}
           <button className="btn btn-primary w-full justify-center" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
@@ -169,17 +202,23 @@ export default function Login() {
             <p className="text-sm text-ink-soft mt-1">
               Signing in as <b>{check.user.displayName}</b>.
             </p>
-            <label className="text-xs text-ink-faint mt-4 block">
-              What is {check.a} + {check.b}?
-            </label>
-            <input
-              className="input mt-1"
-              autoFocus
-              inputMode="numeric"
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-            />
-            {checkErr && <div className="text-xs mt-1.5" style={{ color: "var(--risk)" }}>{checkErr}</div>}
+            <div className={`t-input-wrap ${checkErr ? "is-error" : ""}`}>
+              <label className="text-xs text-ink-faint mt-4 block">
+                What is {check.a} + {check.b}?
+              </label>
+              <input
+                ref={answerShakeRef}
+                className={`input t-input mt-1 ${checkErr ? "is-error" : ""}`}
+                autoFocus
+                inputMode="numeric"
+                value={answer}
+                onChange={(e) => {
+                  setAnswer(e.target.value);
+                  if (checkErr) setCheckErr("");
+                }}
+              />
+              <div className="t-error-msg text-xs mt-1.5" style={{ color: "var(--risk)" }}>{checkErr}</div>
+            </div>
             <div className="flex justify-end gap-2 mt-4">
               <button type="button" className="btn" onClick={() => setCheck(null)}>Cancel</button>
               <button className="btn btn-primary" disabled={busy || !answer.trim()}>
