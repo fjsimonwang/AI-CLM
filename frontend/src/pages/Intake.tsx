@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BorderBeam } from "border-beam";
+import { ThinkingOrb } from "thinking-orbs";
+import { Liquid } from "liquid-gooey";
 import { api, apiForm, apiBlob, apiStream, apiText } from "../api";
 import { Card, SectionTitle, Badge, Spinner, Empty } from "../components/ui";
 import { AiAffordance } from "../components/AiAffordance";
@@ -10,6 +13,110 @@ import { AiReviewPanel } from "../components/AiReviewPanel";
 import { DockablePanel, useDockablePanel } from "../components/DockablePanel";
 
 type Msg = { role: string; content: string };
+
+/** Drop-in for Spinner that swaps the plain spinning dot for a thinking-orbs
+ * canvas indicator — a quick try of the Libraries.dev "AI agent" effects on
+ * this page's own AI-processing moments. */
+function AiThinking({ label, state = "working" }: { label?: string; state?: React.ComponentProps<typeof ThinkingOrb>["state"] }) {
+  return (
+    <div className="flex flex-col items-center gap-2 text-ink-faint text-sm py-6 justify-center">
+      <ThinkingOrb state={state} size={64} theme="auto" />
+      {label || "Loading…"}
+    </div>
+  );
+}
+
+/** transitions.dev "avatar group hover" — distance-falloff lift across a
+ * horizontal chip row, bouncy spring back on mouseleave. React form from the
+ * skill's own reference doc, adapted to wrap arbitrary chip children instead
+ * of a plain items array. */
+function AvatarHoverGroup({ children, className }: { children: React.ReactNode; className?: string }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const setShifts = (activeIdx: number | null, phase: "in" | "out") => {
+    if (!rootRef.current) return;
+    const cs = getComputedStyle(document.documentElement);
+    const num = (name: string, fb: number) => {
+      const v = parseFloat(cs.getPropertyValue(name));
+      return Number.isFinite(v) ? v : fb;
+    };
+    const ease = (name: string, fb: string) => cs.getPropertyValue(name).trim() || fb;
+
+    const lift = num("--avatar-lift", -4);
+    const falloff = num("--avatar-falloff", 0.45);
+    const scale = num("--avatar-scale", 1.05);
+    const tf =
+      phase === "out"
+        ? ease("--avatar-ease-out", "cubic-bezier(0.34, 3.85, 0.64, 1)")
+        : ease("--avatar-ease-in", "cubic-bezier(0.22, 1, 0.36, 1)");
+
+    rootRef.current.querySelectorAll<HTMLElement>(".t-avatar").forEach((el, i) => {
+      el.style.transitionTimingFunction = tf;
+      if (activeIdx == null) {
+        el.style.setProperty("--shift", "0px");
+        el.style.setProperty("--scale-active", "1");
+        return;
+      }
+      const d = Math.abs(i - activeIdx);
+      el.style.setProperty("--shift", (lift * Math.pow(falloff, d)).toFixed(3) + "px");
+      el.style.setProperty("--scale-active", i === activeIdx ? String(scale) : "1");
+    });
+  };
+
+  return (
+    <div ref={rootRef} className={className} onMouseLeave={() => setShifts(null, "out")}>
+      {React.Children.map(children, (node, i) => (
+        <div className="t-avatar" onMouseEnter={() => setShifts(i, "in")}>
+          {node}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Chat / Upload-paper segmented toggle with a liquid-gooey sliding pill —
+ * a try of the Move effect, wired to the existing `paperMode` state. */
+function PaperModeSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [ind, setInd] = useState({ x: 2, w: 0 });
+  const idx = value ? 1 : 0;
+
+  useLayoutEffect(() => {
+    const el = refs.current[idx];
+    if (el) setInd({ x: el.offsetLeft, w: el.offsetWidth });
+  }, [idx]);
+
+  return (
+    <div className="relative inline-flex shrink-0 rounded-full border border-border bg-surface-2 p-0.5">
+      <Liquid blur={3} contrast={20} fill="var(--accent)" shadow="0 1px 2px rgba(0,0,0,0.18)">
+        <Liquid.Item effect="move" move={{ springiness: 0.6, trail: 0.45 }}>
+          <div
+            className="absolute top-0.5 bottom-0.5 rounded-full"
+            style={{ transform: `translateX(${ind.x - 2}px)`, width: ind.w || 0, left: 2 }}
+          />
+        </Liquid.Item>
+        <div className="relative z-10 flex">
+          <button
+            ref={(el) => { refs.current[0] = el; }}
+            type="button"
+            onClick={() => onChange(false)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${value ? "text-ink-faint" : "text-white"}`}
+          >
+            Chat
+          </button>
+          <button
+            ref={(el) => { refs.current[1] = el; }}
+            type="button"
+            onClick={() => onChange(true)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${value ? "text-white" : "text-ink-faint"}`}
+          >
+            Upload paper
+          </button>
+        </div>
+      </Liquid>
+    </div>
+  );
+}
 
 /** Small rounded-rectangle action link used under the chat greeting (neutral, warms to accent on hover). */
 const actionLinkCls =
@@ -774,9 +881,11 @@ export default function Intake() {
           className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2 shrink-0"
           style={{ background: "linear-gradient(90deg, var(--accent-soft) 0%, transparent 70%)" }}
         >
-          <span className="w-6 h-6 rounded-[8px] bg-accent flex items-center justify-center shrink-0" style={{ background: "var(--accent)" }}>
-            <Icon.sparkle width={13} height={13} style={{ color: "#fff" }} />
-          </span>
+          <BorderBeam active={streaming} size="sm" colorVariant="ocean" theme="auto" className="shrink-0">
+            <span className="w-6 h-6 rounded-[8px] bg-accent flex items-center justify-center" style={{ background: "var(--accent)" }}>
+              <Icon.sparkle width={13} height={13} style={{ color: "#fff" }} />
+            </span>
+          </BorderBeam>
           <span className="text-sm font-medium truncate flex-1">
             New request
             <span className="text-ink-faint font-normal">
@@ -784,6 +893,12 @@ export default function Intake() {
             </span>
           </span>
           <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 max-lg:order-3 max-lg:w-full">
+          {(paperMode || (messages.length <= 1 && !session?.resultingContractId)) && (
+            <PaperModeSwitch
+              value={paperMode}
+              onChange={(v) => { setPaperMode(v); setUploadError(""); }}
+            />
+          )}
           <button
             className="btn shrink-0"
             style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
@@ -941,7 +1056,7 @@ export default function Intake() {
               onClick={() => fileInputRef.current?.click()}
             >
               {uploading ? (
-                <Spinner label="AI is reading the contract…" />
+                <AiThinking state="searching" label="AI is reading the contract…" />
               ) : (
                 <>
                   <Icon.upload width={32} height={32} style={{ color: "var(--accent)" }} />
@@ -972,7 +1087,7 @@ export default function Intake() {
         ) : (
         <>
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.length === 0 && <Spinner label="Starting session…" />}
+          {messages.length === 0 && <AiThinking state="connecting" label="Starting session…" />}
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
@@ -987,7 +1102,14 @@ export default function Intake() {
           {streaming && (
             <div className="flex justify-start">
               <div className="max-w-[80%] text-sm rounded-[10px] px-3 py-2 bg-surface-2 text-ink">
-                {streamText ? <RichText content={streamText} /> : <span className="text-ink-faint">{status}</span>}
+                {streamText ? (
+                  <RichText content={streamText} />
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-ink-faint">
+                    <ThinkingOrb state="working" size={20} theme="auto" />
+                    {status}
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -1615,20 +1737,22 @@ function FieldInput({
       setTimeout(onCommit, 0);
     };
     return (
-      <div className="rounded-[8px] border border-border p-1.5 max-h-36 overflow-y-auto flex flex-wrap gap-1">
-        {(field.options || []).map((o) => {
-          const on = selected.includes(o.value);
-          return (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => toggle(o.value)}
-              className={`chip transition-all ${on ? "!bg-[color:var(--accent)] !text-white !border-[color:var(--accent)]" : "hover:border-[color:var(--accent)]"}`}
-            >
-              {o.label.split(" (")[0]}
-            </button>
-          );
-        })}
+      <div className="rounded-[8px] border border-border p-1.5 max-h-36 overflow-y-auto">
+        <AvatarHoverGroup className="flex flex-wrap gap-1">
+          {(field.options || []).map((o) => {
+            const on = selected.includes(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => toggle(o.value)}
+                className={`chip transition-all ${on ? "!bg-[color:var(--accent)] !text-white !border-[color:var(--accent)]" : "hover:border-[color:var(--accent)]"}`}
+              >
+                {o.label.split(" (")[0]}
+              </button>
+            );
+          })}
+        </AvatarHoverGroup>
       </div>
     );
   }

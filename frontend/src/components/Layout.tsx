@@ -236,11 +236,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       >
                         <I className="shrink-0" />
                         {!c && <span className="whitespace-nowrap flex-1">{it.label}</span>}
-                        {n > 0 && (
+                        {n > 0 && c && (
+                          // collapsed rail: badge overlays the icon's corner — the classic
+                          // trigger+dot shape the transitions.dev notification-badge targets
+                          <span className="t-badge" data-open="true" style={{ top: 4, right: 4 }}>
+                            <span
+                              className="t-badge-dot w-4 h-4 text-[10px] font-medium text-white rounded-full grid place-items-center"
+                              style={{ background: "var(--risk)" }}
+                            >
+                              {n}
+                            </span>
+                          </span>
+                        )}
+                        {n > 0 && !c && (
                           <span
-                            className={`text-[10px] font-medium text-white rounded-full grid place-items-center pop-in ${
-                              c ? "absolute top-1 right-1 w-4 h-4" : "min-w-[18px] h-[18px] px-1"
-                            }`}
+                            className="text-[10px] font-medium text-white rounded-full grid place-items-center pop-in min-w-[18px] h-[18px] px-1"
                             style={{ background: "var(--risk)" }}
                           >
                             {n}
