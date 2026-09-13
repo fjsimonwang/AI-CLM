@@ -66,6 +66,7 @@ public class MockLlmClient implements LlmClient {
             case "AGENT_DISCUSS" -> agentDiscuss(user);
             case "AGENT_CLARIFY" -> agentClarify(user);
             case "REJECT_RULE" -> rejectRule(user);
+            case "WORKFLOW_EDIT" -> workflowEdit(lastUser(messages));
             case "HELP_CHAT" -> helpChat(user);
             default -> json ? "{\"answer\":\"(mock) No live model configured.\"}"
                             : "I don't have a live model configured, but the deterministic path is working.";
@@ -320,6 +321,22 @@ public class MockLlmClient implements LlmClient {
         return "{\"combinator\":\"" + combinator + "\",\"requirements\":[" + reqs + "],"
                 + "\"summary\":\"" + esc(summary) + "\","
                 + "\"notes\":[\"(mock model) Structured deterministically; configure a live LLM for full natural-language interpretation.\"]}";
+    }
+
+    // ---- workflow-definition edit (offline stand-in: no live model to interpret the instruction,
+    // so echo the current definition back unchanged rather than guess at a structural edit) ----
+    private String workflowEdit(String rawUser) {
+        String def = "{}";
+        int begin = rawUser.indexOf("CURRENT DEFINITION:\n");
+        if (begin >= 0) {
+            String rest = rawUser.substring(begin + "CURRENT DEFINITION:\n".length());
+            int end = rest.indexOf("\n\n=== ADMIN INSTRUCTION");
+            def = (end >= 0 ? rest.substring(0, end) : rest).trim();
+        }
+        return "{\"definition\":" + def + ","
+                + "\"summary\":\"(mock) No live model configured — your workflow is shown unchanged.\","
+                + "\"changes\":[],"
+                + "\"notes\":[\"(mock model) Configure LLM_BASE_URL/LLM_API_KEY/LLM_MODEL to enable AI-drafted workflow edits.\"]}";
     }
 
     // ---- helpers ----

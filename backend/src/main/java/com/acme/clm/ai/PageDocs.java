@@ -325,7 +325,11 @@ public final class PageDocs {
             (MANAGE_WORKFLOWS only) — a visual approval-flow builder: an auto-drawn flow diagram of the
             states and transitions, a start-state picker, and one editable card per state (assignee role,
             task type REVIEW/APPROVAL/SIGNATURE/REVISION, SLA hours, guard checkboxes, and its outgoing
-            transitions to other states); Publishing a new version never alters in-flight instances;
+            transitions to other states) — plus an "Ask AI to edit this workflow" box: describe a change in
+            plain language (e.g. "add a finance approval step before signature for contracts over $50k") and
+            the AI drafts a proposed new flow with a summary and change list; nothing is applied until you
+            click "Apply to draft" (then Save as normal) — Discard leaves the workflow untouched. Publishing
+            a new version never alters in-flight instances;
             "dimensions" access dimensions (a tag-list editor for suggested values); "scopes" approver
             scopes (a visual "dimension -> allowed values" editor — omit a dimension for "any"); "grants"
             direct access grants (same visual dimension editor); "review-rules" the AI review checklist

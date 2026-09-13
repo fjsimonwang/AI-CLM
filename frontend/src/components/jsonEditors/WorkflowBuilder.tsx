@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { api } from "../../api";
 import { Icon } from "../icons";
 import { TagListEditor } from "./TagListEditor";
 import {
@@ -195,6 +197,117 @@ function FlowPreview({ wf }: { wf: WFDef }) {
   );
 }
 
+type WorkflowEditProposal = {
+  definition: any;
+  summary: string;
+  changes: string[];
+  notes: string[];
+  changed: boolean;
+  modelLive: boolean;
+};
+
+/**
+ * Lets an admin describe a change in plain language; the AI drafts a proposed new definition,
+ * which is shown as a preview (never applied automatically) until the admin explicitly accepts
+ * it into the draft — they still need to hit the modal's own Save afterwards, same as any
+ * hand-edit here.
+ */
+function AiEditPanel({
+  wf, entityKey, versionNo, onApply,
+}: {
+  wf: WFDef; entityKey: string; versionNo: number; onApply: (definition: any) => void;
+}) {
+  const [instruction, setInstruction] = useState("");
+  const [proposal, setProposal] = useState<WorkflowEditProposal | null>(null);
+  const suggest = useMutation({
+    mutationFn: () => api<WorkflowEditProposal>("/ai/workflow/suggest-edit", {
+      method: "POST",
+      json: { currentDefinition: buildDefinition(wf, entityKey, versionNo), instruction },
+    }),
+    onSuccess: (data) => setProposal(data),
+  });
+  const proposedWf = proposal ? parseDefinition(proposal.definition) : null;
+
+  return (
+    <div
+      className="rounded-lg border p-3 space-y-2"
+      style={{ background: "color-mix(in srgb, var(--ai) 6%, var(--surface))", borderColor: "color-mix(in srgb, var(--ai) 35%, var(--border))" }}
+    >
+      <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "var(--ai)" }}>
+        <Icon.sparkle width={13} height={13} /> Ask AI to edit this workflow
+      </div>
+      <textarea
+        className="input text-xs"
+        rows={2}
+        placeholder="e.g. Add a finance approval step before signature for contracts over $50k"
+        value={instruction}
+        onChange={(e) => setInstruction(e.target.value)}
+      />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ padding: "0.35rem 0.7rem" }}
+          disabled={!instruction.trim() || suggest.isPending}
+          onClick={() => suggest.mutate()}
+        >
+          {suggest.isPending ? "Thinking…" : "Suggest changes"}
+        </button>
+        {suggest.isError && (
+          <span className="text-xs" style={{ color: "var(--risk)" }}>
+            {(suggest.error as any)?.message || "Could not reach the AI."}
+          </span>
+        )}
+      </div>
+
+      {proposal && proposedWf && (
+        <div className="rounded-lg border border-border p-3 space-y-2" style={{ background: "var(--surface)" }}>
+          {!proposal.modelLive && (
+            <div className="text-[11px]" style={{ color: "var(--warn)" }}>
+              No live LLM configured — this is a placeholder response.
+            </div>
+          )}
+          <div className="text-sm">{proposal.summary}</div>
+          {proposal.changed ? (
+            proposal.changes.length > 0 && (
+              <ul className="text-xs text-ink-soft list-disc pl-4 space-y-0.5">
+                {proposal.changes.map((c, i) => <li key={i}>{c}</li>)}
+              </ul>
+            )
+          ) : (
+            <div className="text-xs" style={{ color: "var(--warn)" }}>The AI could not make this change.</div>
+          )}
+          {proposal.notes.length > 0 && (
+            <ul className="text-[11px] text-ink-faint list-disc pl-4 space-y-0.5">
+              {proposal.notes.map((n, i) => <li key={i}>{n}</li>)}
+            </ul>
+          )}
+          {proposal.changed && (
+            <div>
+              <div className="text-[11px] text-ink-faint mb-1">Proposed flow</div>
+              <FlowPreview wf={proposedWf} />
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ padding: "0.3rem 0.6rem" }}
+              disabled={!proposal.changed}
+              onClick={() => { onApply(proposal.definition); setProposal(null); setInstruction(""); }}
+            >
+              Apply to draft
+            </button>
+            <button type="button" className="btn" style={{ padding: "0.3rem 0.6rem" }} onClick={() => setProposal(null)}>
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WorkflowBuilder({
   definition,
   entityKey,
@@ -260,6 +373,13 @@ export function WorkflowBuilder({
 
   return (
     <div className="mt-1 space-y-3">
+      <AiEditPanel
+        wf={wf}
+        entityKey={entityKey}
+        versionNo={versionNo}
+        onApply={(def) => emit(parseDefinition(def))}
+      />
+
       {wf.states.length > 0 && (
         <div>
           <label className="text-xs text-ink-faint">Start state</label>
