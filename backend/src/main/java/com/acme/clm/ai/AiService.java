@@ -756,9 +756,10 @@ public class AiService {
             - Public landing page (/landing.html): the marketing front page for Kervion CLM, outside the
               signed-in app. Not part of the product itself; it links back to Log in and to the platform.
             - Administration (Configure section, admins only): entities, teams, users, parties, contract
-              types, clause concepts/variants, templates, playbooks, signing authority, workflows,
-              access, and "Policies & procedures" (upload policy documents the help assistant learns
-              from, scoped by role / country / region / confidential).
+              types (with a visual intake-field builder), clause concepts/variants, templates, playbooks,
+              signing authority, workflows (a visual approval-flow builder — states, roles, guards,
+              transitions, plus a flow diagram), access, and "Policies & procedures" (upload policy
+              documents the help assistant learns from, scoped by role / country / region / confidential).
 
             HARD RULES:
             - You are advisory only. You NEVER create, edit, approve, reject or delete anything.

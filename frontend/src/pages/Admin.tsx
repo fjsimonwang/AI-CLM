@@ -4,6 +4,10 @@ import { api, usePerms } from "../api";
 import { adminTabs } from "../components/Layout";
 import { Icon } from "../components/icons";
 import { AdminCrud, FieldDef } from "../components/AdminCrud";
+import { WorkflowBuilder } from "../components/jsonEditors/WorkflowBuilder";
+import { FieldSchemaBuilder } from "../components/jsonEditors/FieldSchemaBuilder";
+import { TagListEditor } from "../components/jsonEditors/TagListEditor";
+import { parseJsonish } from "../components/jsonEditors/shared";
 
 const REGIONS = [
   { value: "EU", label: "EU" },
@@ -21,6 +25,7 @@ const typeRef = { key: "types", url: "/refdata/contract-types?includeInactive=tr
 const conceptRef = { key: "concepts", url: "/clauses/concepts", labelKey: "name", valueKey: "id" };
 const templateRef = { key: "templates", url: "/templates", labelKey: "name", valueKey: "id" };
 const workflowRef = { key: "workflows", url: "/admin/workflows", labelKey: "name", valueKey: "id" };
+const dimensionRef = { key: "dims", url: "/admin/access/dimensions", labelKey: "name", valueKey: "code" };
 
 export default function Admin() {
   const can = usePerms();
@@ -174,8 +179,18 @@ export default function Admin() {
             { key: "isActive", label: "Active", type: "boolean" },
             { key: "defaultTemplateId", label: "Default template", type: "select", optionsFrom: "templates" },
             { key: "defaultWorkflowId", label: "Default workflow", type: "select", optionsFrom: "workflows" },
-            { key: "fieldSchema", label: "Field schema (JSON Schema)", type: "json", help: "properties, required, x-group / x-money / x-multiline hints" },
-            { key: "uiGroups", label: "UI groups (JSON array)", type: "json" },
+            { key: "uiGroups", label: "Field groups", type: "tag-list", help: "Sections shown on the intake form; pick one per field below." },
+            {
+              key: "fieldSchema", label: "Intake form fields", required: false,
+              help: "Drives the dynamic intake form for this contract type — add, reorder or remove the fields requesters fill in.",
+              render: (form, set) => (
+                <FieldSchemaBuilder
+                  fieldSchema={form.fieldSchema}
+                  groups={parseJsonish<string[]>(form.uiGroups, [])}
+                  onChange={(next) => set("fieldSchema", next)}
+                />
+              ),
+            },
           ]}
         />
       )}
@@ -335,7 +350,10 @@ export default function Admin() {
             { key: "priority", label: "Priority (lower first)", type: "number" },
             { key: "targetType", label: "Target type", type: "select", options: ["USER", "TEAM", "ROUND_ROBIN", "LOAD_BALANCED"].map((v) => ({ value: v, label: v })) },
             { key: "targetId", label: "Target team", type: "select", optionsFrom: "teams" },
-            { key: "conditionExpression", label: "Condition (JSON)", type: "json" },
+            {
+              key: "conditionExpression", label: "Conditions (all must match)", type: "key-value",
+              help: "e.g. entityRegion = EU. Leave empty to match every contract.",
+            },
             { key: "isActive", label: "Active", type: "boolean" },
           ]}
         />
@@ -344,9 +362,10 @@ export default function Admin() {
       {tab === "workflows" && (
         <AdminCrud
           title="Workflow definitions"
-          description="JSON state machines. Publishing a new version never alters in-flight instances."
+          description="Build the approval flow visually: states, who each step is assigned to, and the transitions between them. Publishing a new version never alters in-flight instances."
           listUrl="/admin/workflows"
           saveUrl="/admin/workflows"
+          refs={[typeRef]}
           columns={[
             { key: "key", label: "Key" },
             { key: "name", label: "Name" },
@@ -357,8 +376,32 @@ export default function Admin() {
             { key: "key", label: "Key", required: true },
             { key: "name", label: "Name", required: true },
             { key: "status", label: "Status", type: "select", options: [{ value: "PUBLISHED", label: "Published" }, { value: "DRAFT", label: "Draft" }] },
-            { key: "scopeExpression", label: "Scope (JSON)", type: "json" },
-            { key: "definition", label: "Definition (JSON state machine)", type: "json" },
+            {
+              key: "scopeExpression", label: "Applies to contract types",
+              help: "Documentation only today — the workflow actually used is still set per contract type below.",
+              render: (form, set, ctx) => {
+                const scope = parseJsonish<Record<string, any>>(form.scopeExpression, {});
+                const { contractTypes, ...rest } = scope;
+                return (
+                  <TagListEditor
+                    value={Array.isArray(contractTypes) ? contractTypes : []}
+                    onChange={(next) => set("scopeExpression", { ...rest, contractTypes: next })}
+                    suggestions={ctx.optionsFor({ key: "scopeExpression", label: "", optionsFrom: "types" }).map((o) => o.value)}
+                  />
+                );
+              },
+            },
+            {
+              key: "definition", label: "States & approval flow", required: true,
+              render: (form, set) => (
+                <WorkflowBuilder
+                  definition={form.definition}
+                  entityKey={form.key}
+                  versionNo={form.versionNo}
+                  onChange={(next) => set("definition", next)}
+                />
+              ),
+            },
           ]}
         />
       )}
@@ -395,7 +438,7 @@ export default function Admin() {
                 { value: "owner_department", label: "Owner's department" },
               ],
             },
-            { key: "valueOptions", label: "Suggested values (JSON array)", type: "json" },
+            { key: "valueOptions", label: "Suggested values", type: "tag-list" },
             { key: "sortOrder", label: "Sort order", type: "number" },
             { key: "isActive", label: "Active", type: "boolean" },
           ]}
@@ -409,7 +452,7 @@ export default function Admin() {
           listUrl="/admin/access/approver-scopes"
           saveUrl="/admin/access/approver-scopes"
           deleteUrl="/admin/access/approver-scopes"
-          refs={[userRef]}
+          refs={[userRef, dimensionRef]}
           columns={[
             { key: "user", label: "Approver" },
             { key: "name", label: "Name" },
@@ -419,7 +462,10 @@ export default function Admin() {
           fields={[
             { key: "userId", label: "Approver", type: "select", optionsFrom: "users", required: true },
             { key: "name", label: "Scope name", required: true },
-            { key: "constraints", label: "Constraints (JSON)", type: "json", help: '{ "REGION": ["EU","UK"], "FUNCTION": ["Sales"] }' },
+            {
+              key: "constraints", label: "Owns", type: "key-multi-value", keyOptionsFrom: "dims",
+              help: "One row per dimension. Omit a dimension (or leave it empty) to mean \"any\" for it.",
+            },
             { key: "isActive", label: "Active", type: "boolean" },
           ]}
         />
@@ -432,7 +478,7 @@ export default function Admin() {
           listUrl="/admin/access/grants"
           saveUrl="/admin/access/grants"
           deleteUrl="/admin/access/grants"
-          refs={[userRef]}
+          refs={[userRef, dimensionRef]}
           columns={[
             { key: "user", label: "User" },
             { key: "name", label: "Name" },
@@ -442,7 +488,10 @@ export default function Admin() {
           fields={[
             { key: "userId", label: "User", type: "select", optionsFrom: "users", required: true },
             { key: "name", label: "Name" },
-            { key: "constraints", label: "Constraints (JSON)", type: "json", help: '{ "CONTRACT_TYPE": ["MSA","SOW"] }' },
+            {
+              key: "constraints", label: "Grants access to", type: "key-multi-value", keyOptionsFrom: "dims",
+              help: "One row per dimension. Omit a dimension (or leave it empty) to mean \"any\" for it.",
+            },
             { key: "status", label: "Status", type: "select", options: [{ value: "ACTIVE", label: "Active" }, { value: "REVOKED", label: "Revoked" }] },
           ]}
         />
