@@ -314,15 +314,29 @@ public final class PageDocs {
             "entities" legal entities (country, governing law, region, owning team, active flag);
             "teams" legal teams (region, SLA hours); "users" (MANAGE_USERS only; roles, default entity,
             active); "parties" counterparties (type, sanctions status); "types" contract types (base
-            risk, retention, auto-issue flags, default template/workflow, JSON fieldSchema that drives
-            the intake form); "concepts" clause concepts; "variants" clause variants per concept
-            (tier + text, never deleted, deprecated instead); "templates" (merge fields like
+            risk, retention, auto-issue flags, default template/workflow, a "Field groups" tag list, and
+            a visual intake-form field builder — add/reorder/remove fields, pick each field's type
+            (text/long text/number/yes-no/date/dropdown), required flag, money flag and group; dropdown
+            fields get an option-chip editor); "concepts" clause concepts; "variants" clause variants
+            per concept (tier + text, never deleted, deprecated instead); "templates" (merge fields like
             {{counterparty_name}}, docx/HTML upload); "playbooks"; "signing" signing authority (entity,
-            user, type, max value); "rules" assignment rules (priority, USER/TEAM/ROUND_ROBIN target);
-            "workflows" (MANAGE_WORKFLOWS only; JSON state machines, Publishing; in-flight instances
-            unaffected); "dimensions" access dimensions; "scopes" approver scopes (constraints JSON per
-            dimension); "grants" direct access grants; "review-rules" the AI review checklist used by
-            document review (code, instruction, severity, active);
+            user, type, max value); "rules" assignment rules (priority, USER/TEAM/ROUND_ROBIN target,
+            and a visual "field = value" condition-row editor — all rows must match); "workflows"
+            (MANAGE_WORKFLOWS only) — a visual approval-flow builder: an auto-drawn flow diagram of the
+            states and transitions, a start-state picker, and one editable card per state (assignee role,
+            task type REVIEW/APPROVAL/SIGNATURE/REVISION, SLA hours, guard checkboxes, and its outgoing
+            transitions to other states) — plus an "Ask AI to edit this workflow" box: describe a change in
+            plain language (e.g. "add a finance approval step before signature for contracts over $50k") and
+            the AI drafts a proposed new flow with a summary and change list; nothing is applied until you
+            click "Apply to draft" (then Save as normal) — Discard leaves the workflow untouched. Publishing
+            a new version never alters in-flight instances;
+            "dimensions" access dimensions (a tag-list editor for suggested values); "scopes" approver
+            scopes (a visual "dimension -> allowed values" editor — omit a dimension for "any"); "grants"
+            direct access grants (same visual dimension editor); "review-rules" the AI review checklist
+            used by document review (code, instruction, severity, active);
+            Every config field above that used to be raw JSON also keeps a small "Advanced (JSON)"
+            toggle next to its visual editor, for anyone who wants to paste/inspect the underlying JSON
+            directly.
             "policies" Policies & procedures — upload a Word/HTML/txt policy document (or paste its
             text); tick the roles / countries / regions it applies to (untick all = everyone on
             that dimension) and a "Confidential" toggle. The floating help assistant reads these

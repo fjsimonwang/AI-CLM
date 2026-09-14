@@ -2,13 +2,17 @@ package com.acme.clm.ai;
 
 import com.acme.clm.common.Json;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -698,6 +702,103 @@ public class AiService {
         return spec;
     }
 
+    public record WorkflowEditProposal(JsonNode definition, String summary, List<String> changes,
+                                        List<String> notes, boolean changed) {}
+
+    /**
+     * Drafts a change to a workflow's state-machine `definition` from an admin's plain-language
+     * instruction. Never persists anything — the caller (the visual workflow builder) shows the
+     * admin a preview and only applies the draft into the form when they explicitly accept it,
+     * same as any hand-edit; it still needs an explicit Save afterwards to reach the database.
+     */
+    public WorkflowEditProposal proposeWorkflowEdit(String currentDefinitionJson, String instruction, UUID userId) {
+        String sys = """
+            [[capability:WORKFLOW_EDIT]]
+            You edit a contract-approval workflow — a state machine — for an admin, from their plain-language
+            instruction. Make the SMALLEST change that satisfies the instruction; preserve every state,
+            transition and field the instruction doesn't ask you to change.
+
+            SCHEMA (the ONLY shape you may produce for "definition"):
+            {"key": string, "initial": string (a state's key), "states": [
+              {"key": string (unique, snake_case),
+               "type": "task" | "end",
+               // task states only, below — omit all of these on "end" states:
+               "taskType": "REVIEW" | "APPROVAL" | "SIGNATURE" | "REVISION",
+               "assignment": {"role": one of owner|signatory|owner_manager|legal_team|legal_manager|finance_approver,
+                              or a short custom_role_code if none of those fit},
+               "slaHours": integer (optional),
+               "guards": array, only from "signing_authority_valid","no_open_deviations" (optional),
+               "transitions": [{"on": string event name, "to": another state's key}]
+              }]}
+            Rules:
+            - "type":"end" states have ONLY "key" and "type".
+            - Every transition's "to" MUST be a key that exists in "states".
+            - "initial" MUST be one of the state keys.
+            - A terminal ("end") state that sends the contract back to the requestor as a draft (a rejection
+              outcome) MUST have a key containing "reject" (e.g. "closed_rejected"); a terminal state that
+              completes the contract should be keyed "executed" or another key WITHOUT "reject" — the workflow
+              engine tells these apart purely by that key convention, so get it right.
+            - REVISION-type task states are for the requestor to fix and resubmit — assign them to "owner",
+              not an approver role.
+
+            Respond with a single JSON object:
+            {"definition": <the FULL updated workflow definition, in the schema above>,
+             "summary": one sentence describing what you changed,
+             "changes": [short bullet strings, one per concrete change — an added/removed/renamed state or
+                         transition, or a changed role/taskType/SLA/guard],
+             "notes": [0-4 short strings — anything you assumed, or why you could not fully do it]}
+            If the instruction is unclear, unsafe, or cannot be applied within this schema, return the CURRENT
+            DEFINITION UNCHANGED as "definition", an empty "changes" list, and explain why in "notes".
+            """;
+        String user = "CURRENT DEFINITION:\n" + currentDefinitionJson
+                + "\n\n=== ADMIN INSTRUCTION (untrusted) ===\n" + neutralizeFences(instruction)
+                + "\n=== END OF ADMIN INSTRUCTION ===";
+
+        long t0 = System.currentTimeMillis();
+        LlmClient.ChatResult r = llm.chatJson(List.of(LlmClient.Message.system(sys),
+                LlmClient.Message.user(user)), false);
+        JsonNode j = safeJson(r.text());
+        JsonNode current = Json.read(currentDefinitionJson);
+        JsonNode repaired = repairWorkflowDefinition(j.path("definition"), current);
+        boolean changed = !repaired.equals(current);
+
+        aiLog.record("ADMIN", "WORKFLOW_EDIT", r.modelId(), "workflow_edit", PROMPT_VERSION,
+                Map.of("instructionLength", instruction.length()), j, null, null,
+                (int) (System.currentTimeMillis() - t0), r.promptTokens() + r.completionTokens(),
+                userId, null, null);
+        return new WorkflowEditProposal(repaired, j.path("summary").asText(""),
+                toListOfStrings(j.path("changes")), toListOfStrings(j.path("notes")), changed);
+    }
+
+    /**
+     * Falls back to {@code current} unchanged if {@code proposed} isn't structurally usable;
+     * otherwise strips transitions pointing at nonexistent states and repairs a missing/invalid
+     * "initial". A malformed definition would break the live engine (WorkflowService), so a
+     * proposal must never pass through without this check.
+     */
+    private JsonNode repairWorkflowDefinition(JsonNode proposed, JsonNode current) {
+        if (!proposed.isObject() || !proposed.path("states").isArray() || proposed.path("states").isEmpty()) {
+            return current;
+        }
+        ObjectNode out = proposed.deepCopy();
+        Set<String> keys = new LinkedHashSet<>();
+        for (JsonNode s : out.path("states")) {
+            if (s.hasNonNull("key")) keys.add(s.path("key").asText());
+        }
+        if (keys.isEmpty()) return current;
+        for (JsonNode s : out.path("states")) {
+            if (!(s instanceof ObjectNode so) || !so.path("transitions").isArray()) continue;
+            ArrayNode trs = (ArrayNode) so.path("transitions");
+            for (int i = trs.size() - 1; i >= 0; i--) {
+                if (!keys.contains(trs.get(i).path("to").asText(""))) trs.remove(i);
+            }
+        }
+        if (!keys.contains(out.path("initial").asText(""))) {
+            out.put("initial", keys.iterator().next());
+        }
+        return out;
+    }
+
     // ---------------- In-product help chat ----------------
 
     /**
@@ -756,9 +857,10 @@ public class AiService {
             - Public landing page (/landing.html): the marketing front page for Kervion CLM, outside the
               signed-in app. Not part of the product itself; it links back to Log in and to the platform.
             - Administration (Configure section, admins only): entities, teams, users, parties, contract
-              types, clause concepts/variants, templates, playbooks, signing authority, workflows,
-              access, and "Policies & procedures" (upload policy documents the help assistant learns
-              from, scoped by role / country / region / confidential).
+              types (with a visual intake-field builder), clause concepts/variants, templates, playbooks,
+              signing authority, workflows (a visual approval-flow builder — states, roles, guards,
+              transitions, plus a flow diagram), access, and "Policies & procedures" (upload policy
+              documents the help assistant learns from, scoped by role / country / region / confidential).
 
             HARD RULES:
             - You are advisory only. You NEVER create, edit, approve, reject or delete anything.

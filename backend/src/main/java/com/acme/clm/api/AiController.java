@@ -245,6 +245,27 @@ public class AiController {
         return Json.mapper().convertValue(j, Object.class);
     }
 
+    public record WorkflowEditRequest(Object currentDefinition, String instruction) {}
+
+    /**
+     * Drafts a change to a workflow state machine from a plain-language instruction. Stateless —
+     * nothing is persisted here; the visual workflow builder shows the admin a preview and only
+     * folds the draft into the form (still requiring its own Save) once they accept it.
+     */
+    @PostMapping("/workflow/suggest-edit")
+    @PreAuthorize("hasAuthority('PERM_MANAGE_WORKFLOWS')")
+    public Map<String, Object> suggestWorkflowEdit(@RequestBody WorkflowEditRequest req) {
+        var p = ai.proposeWorkflowEdit(Json.write(req.currentDefinition()), req.instruction(), current.id());
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("definition", Json.mapper().convertValue(p.definition(), Object.class));
+        out.put("summary", p.summary());
+        out.put("changes", p.changes());
+        out.put("notes", p.notes());
+        out.put("changed", p.changed());
+        out.put("modelLive", ai.modelIsLive());
+        return out;
+    }
+
     /** Shared briefing: stored per contract, reused by the Approvals page and the contract page. */
     @PostMapping("/approver-briefing")
     public Map<String, Object> approverBriefing(@RequestBody SummarizeRequest req,
