@@ -291,7 +291,13 @@ export default function ContractDetail() {
   const [decision, setDecision] = useState<null | "approve" | "reject">(null);
   const [lifecycle, setLifecycle] = useState<null | "cancel" | "close" | "recall">(null);
   const [signStep, setSignStep] = useState<null | "confirm" | "sent">(null);
-  const [recordOpen, setRecordOpen] = useState(true);
+  const [recordOpen, setRecordOpen] = useState(() => {
+    try { return localStorage.getItem("clm-contract-summary") !== "0"; } catch { return true; }
+  });
+  const toggleRecord = (v: boolean) => {
+    setRecordOpen(v);
+    try { localStorage.setItem("clm-contract-summary", v ? "1" : "0"); } catch { /* ignore */ }
+  };
   const [quickCheck, setQuickCheck] = useState<any>(null); // result object or "error"
   const [checking, setChecking] = useState(false);
   const [qcError, setQcError] = useState<string | null>(null);
@@ -838,57 +844,6 @@ export default function ContractDetail() {
         rejectionReason={d.rejectionReason}
       />
 
-      <Card className="!p-0 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setRecordOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-2 transition-colors"
-        >
-          <span className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI summary &amp; briefing</span>
-          <Icon.chevronDown
-            width={15}
-            height={15}
-            style={{ transition: "transform 0.2s", transform: recordOpen ? "none" : "rotate(-90deg)" }}
-          />
-        </button>
-        {recordOpen && (
-        <div className="px-4 pb-4 space-y-4 fade-in">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">Summary</h2>
-              {(summarize.data as any)?.aiDisabled ? (
-                <span className="text-xs text-ink-faint">AI off — enable Agent Crew in the header</span>
-              ) : (
-                <button className="btn btn-ai" style={{ padding: "0.3rem 0.6rem" }} disabled={summarize.isPending} onClick={() => summarize.mutate()}>
-                  <Icon.sparkle width={14} height={14} /> {summarize.isPending ? "Reviewing…" : storedBriefing ? "Regenerate AI briefing" : "Generate AI briefing"}
-                </button>
-              )}
-            </div>
-            <p className="text-[0.95rem] leading-relaxed font-serif">
-              {d.summary && d.intakeSessionId ? (
-                renderSummaryWithSession(d.summary, d.intakeSessionId)
-              ) : (
-                d.summary || "No summary recorded yet."
-              )}
-            </p>
-            {(storedBriefing || summarize.isPending) && (
-              <div className="mt-3">
-                {summarize.isPending && !storedBriefing ? (
-                  <p className="text-sm text-ink-faint">Preparing AI briefing…</p>
-                ) : (
-                  <BriefingCard
-                    briefing={storedBriefing?.briefing}
-                    generatedAt={storedBriefing?.generatedAt}
-                    cached
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        )}
-      </Card>
-
       <div className="lg:flex lg:gap-3 lg:items-start">
         {discussionOpen && (
           <DockablePanel
@@ -912,7 +867,7 @@ export default function ContractDetail() {
           </DockablePanel>
         )}
         <div className="min-w-0 lg:flex-1 space-y-4">
-          {(!discussionOpen || !reviewOpen) && (
+          {(!discussionOpen || !reviewOpen || !recordOpen) && (
             <div className="flex flex-wrap gap-2">
               {!discussionOpen && (
                 <button
@@ -933,7 +888,60 @@ export default function ContractDetail() {
                   <Icon.sparkle width={13} height={13} /> AI review
                 </button>
               )}
+              {!recordOpen && (
+                <button
+                  className="btn"
+                  style={{ padding: "0.25rem 0.6rem", fontSize: "0.8125rem" }}
+                  onClick={() => toggleRecord(true)}
+                >
+                  <Icon.sparkle width={13} height={13} /> AI summary &amp; briefing
+                </button>
+              )}
             </div>
+          )}
+          {recordOpen && (
+            <Card className="!p-0 overflow-hidden">
+              <div className="w-full flex items-center justify-between px-4 py-3" style={{ background: "var(--surface-2)" }}>
+                <span className="text-sm font-medium text-ink-soft uppercase tracking-wide">AI summary &amp; briefing</span>
+                <button className="btn !p-1 !border-0" title="Hide" onClick={() => toggleRecord(false)}>
+                  <Icon.x width={14} height={14} />
+                </button>
+              </div>
+              <div className="px-4 pb-4 pt-1 space-y-4 fade-in">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-sm font-medium text-ink-soft uppercase tracking-wide">Summary</h2>
+                    {(summarize.data as any)?.aiDisabled ? (
+                      <span className="text-xs text-ink-faint">AI off — enable Agent Crew in the header</span>
+                    ) : (
+                      <button className="btn btn-ai" style={{ padding: "0.3rem 0.6rem" }} disabled={summarize.isPending} onClick={() => summarize.mutate()}>
+                        <Icon.sparkle width={14} height={14} /> {summarize.isPending ? "Reviewing…" : storedBriefing ? "Regenerate AI briefing" : "Generate AI briefing"}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[0.95rem] leading-relaxed font-serif">
+                    {d.summary && d.intakeSessionId ? (
+                      renderSummaryWithSession(d.summary, d.intakeSessionId)
+                    ) : (
+                      d.summary || "No summary recorded yet."
+                    )}
+                  </p>
+                  {(storedBriefing || summarize.isPending) && (
+                    <div className="mt-3">
+                      {summarize.isPending && !storedBriefing ? (
+                        <p className="text-sm text-ink-faint">Preparing AI briefing…</p>
+                      ) : (
+                        <BriefingCard
+                          briefing={storedBriefing?.briefing}
+                          generatedAt={storedBriefing?.generatedAt}
+                          cached
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
           )}
           <Tabs
             tabs={[
@@ -952,7 +960,7 @@ export default function ContractDetail() {
         active={tab}
         onChange={(t) => {
           setTab(t);
-          setRecordOpen(false);
+          toggleRecord(false);
         }}
       />
 
