@@ -99,7 +99,7 @@ public final class PageDocs {
             required fields marked *; AI-populated fields show provenance chips and "% confidence";
             low-trust values are highlighted with "looks right — confirm". Fields save on blur; a
             "Save N edit(s)" button flushes pending edits. Also: "Third-party paper" card (with
-            sandboxed "Preview"), green "All required info is captured" notice when ready, "Expected
+            sandboxed "Preview"), green "All required info is captured — continue on this form to submit" notice when ready (the whole form panel also flashes green a few times the moment the chat has collected every mandatory answer, as a cue to review the form and submit there), "Expected
             routing" card (predicted triage path + score + explanation), "Precedents" card (AI-scored,
             toggle to select one), "Supporting documents" card ("Add supporting documents" — attach
             NDAs, due-diligence forms etc.; these are copied onto the contract on every submit,
@@ -198,7 +198,7 @@ public final class PageDocs {
             AI review & submit gate: "Submit for approval" first runs/syncs an "AI quick check" (modal
             listing findings by severity; still allows "Submit anyway"). The "AI review" panel (opened
             from the button next to "Show discussion" — see AI REVIEW PANEL above) lets you pick
-            checked rules and optional playbooks, re-run the review, click a finding's quote to jump
+            checked rules and optional playbooks, run/re-run the review (clicking "Run AI review" also switches to the Document tab so the document being reviewed is visible), click a finding's quote to jump
             to it in the document, and Dismiss/Resolve findings; every finding is also written to the
             Risks tab.
             """);

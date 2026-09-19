@@ -273,6 +273,13 @@ body {
   }
 }
 
+/* Intake: flash the form panel once the chat has gathered every mandatory answer */
+.form-ready-flash { position: relative; border-radius: 12px; animation: formReadyFlash 1.2s ease-in-out 3; }
+@keyframes formReadyFlash {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 35%, transparent), 0 0 14px color-mix(in srgb, var(--ok) 25%, transparent); background: transparent; }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 70%, transparent), 0 0 32px color-mix(in srgb, var(--ok) 55%, transparent); background: color-mix(in srgb, var(--ok) 6%, transparent); }
+}
+
 /* AI insight attention indicators: a pulsing dot + a soft glow on the card header */
 .flash-dot { animation: flashDot 1.3s ease-in-out infinite; }
 @keyframes flashDot {

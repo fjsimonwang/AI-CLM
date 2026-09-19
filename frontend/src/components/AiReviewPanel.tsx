@@ -10,7 +10,7 @@ const sevTone = (s?: string) => riskTone(s);
 const sevRank = (s?: string) => (s === "CRITICAL" ? 4 : s === "HIGH" ? 3 : s === "MEDIUM" ? 2 : 1);
 const dedupe = (title: string) => (title || "").toLowerCase().replace(/\s+/g, " ").trim();
 
-export function AiReviewPanel({ contractId, bare = false }: { contractId: string; bare?: boolean }) {
+export function AiReviewPanel({ contractId, bare = false, onRun }: { contractId: string; bare?: boolean; onRun?: () => void }) {
   const can = usePerms();
   const qc = useQueryClient();
   const canPlaybook = can("EDIT_CONTRACT");
@@ -103,7 +103,7 @@ export function AiReviewPanel({ contractId, bare = false }: { contractId: string
           className="btn btn-ai shrink-0"
           style={{ padding: "0.35rem 0.7rem" }}
           disabled={running || start.isPending || selectedRules.length === 0}
-          onClick={() => start.mutate()}
+          onClick={() => { onRun?.(); start.mutate(); }}
         >
           <Icon.sparkle width={14} height={14} />
           {running

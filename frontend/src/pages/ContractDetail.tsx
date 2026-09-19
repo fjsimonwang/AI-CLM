@@ -1433,7 +1433,7 @@ export default function ContractDetail() {
             onDockResize={review.startDockResize}
           >
             <div className="h-full overflow-y-auto p-3">
-              <AiReviewPanel contractId={id!} bare />
+              <AiReviewPanel contractId={id!} bare onRun={() => setTab("document")} />
             </div>
           </DockablePanel>
         )}
