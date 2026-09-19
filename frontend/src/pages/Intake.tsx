@@ -581,6 +581,21 @@ export default function Intake() {
   const ready = session?.readyToSubmit && !Object.keys(draft).length;
   const canSubmit = missingRequired.length === 0 && needs.length === 0;
 
+  // When the AI chat finishes collecting the mandatory info, flash the form panel
+  // so the user knows to carry on there and submit.
+  const [flashForm, setFlashForm] = useState(false);
+  const wasReadyRef = useRef(false);
+  const isReady = !!session?.readyToSubmit;
+  useEffect(() => {
+    if (isReady && !wasReadyRef.current) {
+      setFlashForm(true);
+      const t = window.setTimeout(() => setFlashForm(false), 3600);
+      wasReadyRef.current = true;
+      return () => window.clearTimeout(t);
+    }
+    if (!isReady) wasReadyRef.current = false;
+  }, [isReady]);
+
   // tappable answers for the questions in the latest assistant message
   const quickQuestions = useMemo(() => {
     if (result || streaming || !messages.length) return [];
@@ -1361,7 +1376,7 @@ export default function Intake() {
       </div>
         </DockablePanel>
       )}
-      <div className="min-w-0 lg:flex-1">
+      <div className={"min-w-0 lg:flex-1" + (flashForm ? " form-ready-flash" : "")}>
       {!chatOpen && (
         <button
           className="btn mb-3"
@@ -1405,7 +1420,7 @@ export default function Intake() {
             className="rounded-[8px] p-3 text-xs leading-relaxed"
             style={{ border: "1px solid var(--ok)", background: "color-mix(in srgb, var(--ok) 8%, transparent)" }}
           >
-            <b>All required info is captured.</b> Before moving to the next step, please review
+            <b>All required info is captured — continue on this form to submit.</b> Please review
             every field on this panel and confirm the contents are correct — especially values
             marked <span style={{ color: "var(--warn)" }}>"AI guess — confirm"</span>.
           </div>
