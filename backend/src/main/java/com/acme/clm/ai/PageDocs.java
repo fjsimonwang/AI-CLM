@@ -146,7 +146,7 @@ public final class PageDocs {
             When the current workflow task is
             assigned to the viewer, the header also shows "Approve" / "Reject" — each opens a
             confirmation dialog (reject requires a reason); the note lands in the Workflow tab.
-            FLOW PROGRESS BAR: directly under the header, above the "AI summary & briefing" card, a
+            FLOW PROGRESS BAR: directly under the header a
             horizontal step bar shows where the contract is. It always starts from the requestor's
             "Submitted" step. When an approval workflow is running it then shows that workflow's own
             steps (e.g. Submitted → Manager approval → Signature → Executed, or the Legal review
@@ -156,8 +156,6 @@ public final class PageDocs {
             is shown. With no workflow yet it shows the generic lifecycle
             (Draft → Submitted → In review → Executed); a returned/rejected, cancelled or closed
             request is called out on the bar too.
-            An "AI summary & briefing" card sits under it (collapsible; can regenerate the
-            approver briefing).
             DISCUSSION PANEL: comment threads live in a movable / dockable / resizable panel (not a
             tab). By default it is docked as a full-height left column beside the tab content
             (sticky); drag the docked column's right edge to change its width. Drag the ⠿ header to
@@ -177,6 +175,10 @@ public final class PageDocs {
             review" button sits next to "Show discussion" to open it. Open/closed state and any
             floating position/size are remembered. (Its contents — check points, playbooks,
             findings — are described under "AI review & submit gate" below.)
+            AI SUMMARY & BRIEFING: above the tabs, next to "Show discussion" / "AI review", an
+            "AI summary & briefing" button opens a card with the plain-language summary and a
+            "Generate/Regenerate AI briefing" action (the structured approver briefing). An "×" on
+            the card hides it and returns the button to the group; switching tabs also collapses it.
             TABS: "Overview" (key-value terms: contracting
             entity, counterparties, governing law, value, dates, owner, liability; grouped "Deal
             terms"; "Clauses used" with tier badges; "People with access" — add/remove participants
