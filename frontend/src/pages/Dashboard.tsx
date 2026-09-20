@@ -48,6 +48,7 @@ export default function Dashboard() {
 
   const [layout, setLayout] = useState<{ key: string; visible: boolean; size?: "full" | "half" }[] | null>(null);
   const [editing, setEditing] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
 
   // merge stored layout with newly-added default sections and custom charts
@@ -175,6 +176,9 @@ export default function Dashboard() {
       const freshDrafts = drafts.filter((c) => !c.rejectionReason);
       const openTasks = (mine.openTasks || []) as any[];
       const nothing = openTasks.length === 0 && drafts.length === 0;
+      const total = rejected.length + freshDrafts.length + openTasks.length;
+      let budget = tasksOpen ? Infinity : LIMIT;
+      const take = <T,>(xs: T[]) => { const r = xs.slice(0, budget); budget -= r.length; return r; };
       return (
         <Card>
           <SectionTitle
@@ -188,7 +192,7 @@ export default function Dashboard() {
             <Empty>Nothing waiting on you.</Empty>
           ) : (
             <div className="divide-y divide-border">
-              {rejected.map((c: any) => (
+              {take(rejected).map((c: any) => (
                 <div key={c.id} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <Link to={`/contracts/${c.id}`} className="link text-sm font-medium">
@@ -202,7 +206,7 @@ export default function Dashboard() {
                   <Link to={`/contracts/${c.id}`} className="btn">Review</Link>
                 </div>
               ))}
-              {freshDrafts.map((c: any) => (
+              {take(freshDrafts).map((c: any) => (
                 <div key={c.id} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <Link to={`/contracts/${c.id}`} className="link text-sm font-medium">{c.contractNumber}</Link>
@@ -212,7 +216,7 @@ export default function Dashboard() {
                   <Link to={`/contracts/${c.id}`} className="btn">Open</Link>
                 </div>
               ))}
-              {openTasks.map((t: any) => (
+              {take(openTasks).map((t: any) => (
                 <div key={t.id} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <Link to={`/contracts/${t.contractId}`} className="link text-sm font-medium">
@@ -235,6 +239,7 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+          <ExpandToggle open={tasksOpen} total={total} limit={LIMIT} onToggle={() => setTasksOpen((o) => !o)} />
         </Card>
       );
     },
@@ -395,19 +400,25 @@ function EditShell({ label, size, onSize, children, onHide, onDelete }: {
   );
 }
 
+const LIMIT = 6;
+
+function ExpandToggle({ open, total, limit, onToggle }: { open: boolean; total: number; limit: number; onToggle: () => void }) {
+  if (total <= limit) return null;
+  return (
+    <button className="link text-xs mt-2.5" onClick={onToggle}>
+      {open ? "Show less" : `Show all ${total}`}
+    </button>
+  );
+}
+
 function AttentionCard({ mine, editing, isApprover }: { mine: any; editing: boolean; isApprover: boolean }) {
+  const [open, setOpen] = useState(false);
   const attention =
     (mine.openTasks || []).length + (mine.discussionsAwaiting || 0) + (mine.accessToDecide || []).length
     + (mine.myDrafts || []).length;
   if (attention === 0 && !editing) return null;
-  return (
-    <Card className="border-[color:var(--accent)]">
-      <SectionTitle>Needs your attention</SectionTitle>
-      {attention === 0 ? (
-        <Empty>Nothing needs your attention right now.</Empty>
-      ) : (
-        <div className="grid sm:grid-cols-2 gap-2">
-          {(mine.myDrafts || []).map((c: any) => (
+  const items = [
+    ...(mine.myDrafts || []).map((c: any) => (
             <Link key={c.id} to={`/contracts/${c.id}`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
               {c.rejectionReason ? (
                 <>
@@ -421,26 +432,39 @@ function AttentionCard({ mine, editing, isApprover }: { mine: any; editing: bool
                 </>
               )}
             </Link>
-          ))}
-          {(mine.openTasks || []).map((t: any) => (
+          )),
+    ...(mine.openTasks || []).map((t: any) => (
             <Link key={t.id} to={isApprover ? "/approvals" : `/contracts/${t.contractId}?tab=workflow`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
               <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--ok) 15%, transparent)", color: "var(--ok)" }}><Icon.checkCircle width={16} height={16} /></span>
               <div className="min-w-0"><div className="text-sm font-medium truncate">{t.contractNumber}</div><div className="text-xs text-ink-faint">{t.state} · {t.type} · due {date(t.dueAt)}{t.overdue ? " · overdue" : ""}</div></div>
             </Link>
-          ))}
-          {(mine.discussions || []).filter((x: any) => x.awaitingMe).map((x: any) => (
+          )),
+    ...(mine.discussions || []).filter((x: any) => x.awaitingMe).map((x: any) => (
             <Link key={x.threadId} to={`/contracts/${x.contractId}`} className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
               <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--warn) 15%, transparent)", color: "var(--warn)" }}><Icon.message width={16} height={16} /></span>
               <div className="min-w-0"><div className="text-sm font-medium truncate">{x.title}</div><div className="text-xs text-ink-faint">{x.contractNumber} · {x.mentioned ? "you were mentioned" : x.askedAgent ? "your agent was asked" : "reply awaited"}</div></div>
             </Link>
-          ))}
-          {(mine.accessToDecide || []).map((r: any) => (
+          )),
+    ...(mine.accessToDecide || []).map((r: any) => (
             <Link key={r.id} to="/access" className="flex items-center gap-2.5 rounded-[8px] border border-border p-2.5 lift hover:border-[color:var(--accent)]">
               <span className="w-8 h-8 rounded-[8px] grid place-items-center shrink-0" style={{ background: "color-mix(in srgb, var(--ai) 15%, transparent)", color: "var(--ai)" }}><Icon.shieldCheck width={16} height={16} /></span>
               <div className="min-w-0"><div className="text-sm font-medium truncate">Access request</div><div className="text-xs text-ink-faint">{r.scope}</div></div>
             </Link>
-          ))}
-        </div>
+          )),
+  ];
+
+  return (
+    <Card className="border-[color:var(--accent)]">
+      <SectionTitle>Needs your attention</SectionTitle>
+      {attention === 0 ? (
+        <Empty>Nothing needs your attention right now.</Empty>
+      ) : (
+        <>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {open ? items : items.slice(0, LIMIT)}
+          </div>
+          <ExpandToggle open={open} total={items.length} limit={LIMIT} onToggle={() => setOpen((o) => !o)} />
+        </>
       )}
     </Card>
   );

@@ -59,7 +59,9 @@ public final class PageDocs {
             Workflow tab; the "All approvals" link shows only for users with APPROVE), plus any saved
             inquiry chart sections (live bar/pie charts, with a "refine" link back into the Contracts
             inquiry). "Needs your attention" lists drafts to review/submit, rejected contracts, open
-            tasks, discussions awaiting reply, access requests — each links to the right page.
+            tasks, discussions awaiting reply, access requests — each links to the right page. Both "My open items" and "Needs your
+            attention" show only the first 6 entries; a "Show all N" link at the bottom expands the
+            full list and "Show less" collapses it again.
             Customize mode: drag to reorder, half/full width per section, hide (eye) sections;
             a "Hidden sections" card can re-show them; edits auto-save (PUT /me/dashboard-config).
             AI: the "AI insight" section (collapsible, subtle styling — no flashing) shows a fast
